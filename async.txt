@@ -1,0 +1,47 @@
+Fetching date 2024-10-17
+Prices:
+ 0:00 -  0:59	  17.04 EUR/MWh
+ 1:00 -  1:59	  12.15 EUR/MWh
+ 2:00 -  2:59	  10.48 EUR/MWh
+ 3:00 -  3:59	   5.61 EUR/MWh (min)
+ 4:00 -  4:59	  10.01 EUR/MWh
+ 5:00 -  5:59	  29.58 EUR/MWh
+ 6:00 -  6:59	  70.24 EUR/MWh
+ 7:00 -  7:59	 100.80 EUR/MWh
+ 8:00 -  8:59	  92.57 EUR/MWh
+ 9:00 -  9:59	  75.63 EUR/MWh
+10:00 - 10:59	  81.04 EUR/MWh
+11:00 - 11:59	  54.21 EUR/MWh
+12:00 - 12:59	  41.95 EUR/MWh
+13:00 - 13:59	  40.71 EUR/MWh
+14:00 - 14:59	  49.94 EUR/MWh
+15:00 - 15:59	  64.50 EUR/MWh
+16:00 - 16:59	  92.22 EUR/MWh
+17:00 - 17:59	 121.60 EUR/MWh
+18:00 - 18:59	 181.18 EUR/MWh (max)
+19:00 - 19:59	 168.61 EUR/MWh
+20:00 - 20:59	 115.78 EUR/MWh
+21:00 - 21:59	  96.45 EUR/MWh
+22:00 - 22:59	  88.21 EUR/MWh
+23:00 - 23:59	  81.22 EUR/MWh
+
+real 0.13
+user 0.01
+sys 0.01
+            10354688  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                 819  page reclaims
+                   4  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                  12  messages sent
+                  21  messages received
+                   0  signals received
+                   3  voluntary context switches
+                 171  involuntary context switches
+            64722421  instructions retired
+            41899828  cycles elapsed
+             4719936  peak memory footprint
