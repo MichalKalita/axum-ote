@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 axum = "0.7.7"
 chrono = { version = "*", features = ["serde"] }
+clap = { version = "*", features = ["derive"] }
 log = "0.4.22"
 reqwest = { version = "*", features = ["blocking", "json"] }
 serde = { version = "1", features = ["derive"] }

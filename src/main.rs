@@ -2,12 +2,31 @@ mod data_loader;
 mod web_server;
 
 use chrono::Local;
+use clap::Parser;
 use data_loader::fetch_data;
 use std::error::Error;
 
+#[derive(Parser)]
+#[clap(
+    name = "OTE CR Price Checker",
+    version = "1.0",
+    author = "Michal Kalita",
+    about = "Fetches and displays the current day-ahead electricity prices from OTE CR."
+)]
+struct Cli {
+    #[clap(long)]
+    web: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    web_server::start_web_server().await;
+    let args = Cli::parse();
+
+    if args.web {
+        web_server::start_web_server().await;
+    } else {
+        print().await;
+    }
 
     Ok(())
 }
