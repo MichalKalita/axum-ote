@@ -1,4 +1,5 @@
 mod data_loader;
+mod web_server;
 
 use chrono::Local;
 use data_loader::fetch_data;
@@ -6,9 +7,13 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Get today's date
-    let today = Local::now().date_naive();
+    web_server::start_web_server().await;
 
+    Ok(())
+}
+
+async fn print() {
+    let today = Local::now().date_naive();
     match fetch_data(today).await {
         Ok(prices) => {
             println!("Prices:");
@@ -30,6 +35,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Error: {}", e);
         }
     }
-
-    Ok(())
 }

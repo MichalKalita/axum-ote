@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-chrono = "*"
+axum = "0.7.7"
+chrono = { version = "*", features = ["serde"] }
 log = "0.4.22"
 reqwest = { version = "*", features = ["blocking", "json"] }
 serde = { version = "1", features = ["derive"] }
