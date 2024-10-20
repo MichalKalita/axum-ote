@@ -1,9 +1,9 @@
 use crate::data_loader::fetch_data;
+use arc_swap::ArcSwap;
 use axum::{extract::State, routing::get, Json, Router};
 use chrono::Local;
 use serde::Serialize;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 #[derive(Serialize, Clone)]
 struct Prices {
@@ -12,22 +12,19 @@ struct Prices {
 }
 
 struct AppState {
-    pub prices: RwLock<Option<Prices>>,
+    pub prices: ArcSwap<Option<Prices>>,
 }
 
 async fn fetch_data_handler(State(state): State<Arc<AppState>>) -> Json<Result<Prices, String>> {
-    let missing_data = { state.prices.read().await.is_none() };
-
-    if missing_data {
+    if state.prices.load().is_none() {
         let today = Local::now().date_naive();
+
         match fetch_data(today).await {
             Ok(prices) => {
-                let mut prices_lock = state.prices.write().await;
-                *prices_lock = Some(Prices {
+                state.prices.store(Arc::new(Some(Prices {
                     prices,
                     date: today,
-                });
-                return Json(Ok(prices_lock.as_ref().unwrap().clone()));
+                })));
             }
             Err(e) => {
                 return Json(Err(e.to_string()));
@@ -35,12 +32,15 @@ async fn fetch_data_handler(State(state): State<Arc<AppState>>) -> Json<Result<P
         }
     }
 
-    Json(Ok(state.prices.read().await.clone().unwrap()))
+    match state.prices.load().as_ref() {
+        Some(prices) => Json(Ok(prices.clone())),
+        None => Json(Err("Data not found".into())),
+    }
 }
 
 pub(crate) async fn start_web_server() {
     let state = Arc::new(AppState {
-        prices: RwLock::new(None),
+        prices: ArcSwap::from(Arc::new(None)),
     });
 
     let app = Router::new()
