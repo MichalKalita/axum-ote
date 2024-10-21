@@ -1,47 +1,60 @@
-use crate::data_loader::fetch_data;
-use arc_swap::ArcSwap;
 use axum::{extract::State, routing::get, Json, Router};
 use chrono::Local;
-use serde::Serialize;
 use std::sync::Arc;
 
-#[derive(Serialize, Clone)]
-struct Prices {
-    pub prices: [f32; 24],
-    pub date: chrono::NaiveDate,
-}
+mod state {
+    use crate::data_loader::fetch_data;
+    use arc_swap::ArcSwap;
+    use serde::Serialize;
+    use std::sync::Arc;
 
-struct AppState {
-    pub prices: ArcSwap<Option<Prices>>,
-}
-
-async fn fetch_data_handler(State(state): State<Arc<AppState>>) -> Json<Result<Prices, String>> {
-    if state.prices.load().is_none() {
-        let today = Local::now().date_naive();
-
-        match fetch_data(today).await {
-            Ok(prices) => {
-                state.prices.store(Arc::new(Some(Prices {
-                    prices,
-                    date: today,
-                })));
-            }
-            Err(e) => {
-                return Json(Err(e.to_string()));
-            }
-        }
+    #[derive(Serialize, Clone)]
+    pub struct Prices {
+        pub prices: [f32; 24],
+        pub date: chrono::NaiveDate,
+    }
+    pub struct AppState {
+        prices: ArcSwap<Option<Prices>>,
     }
 
-    match state.prices.load().as_ref() {
-        Some(prices) => Json(Ok(prices.clone())),
+    impl AppState {
+        pub fn new() -> Self {
+            Self {
+                prices: ArcSwap::from(Arc::new(None)),
+            }
+        }
+        pub async fn get_prices(&self, date: &chrono::NaiveDate) -> Option<Prices> {
+            if self.prices.load().is_none() {
+                match fetch_data(*date).await {
+                    Ok(prices) => {
+                        self.prices.store(Arc::new(Some(Prices {
+                            prices,
+                            date: *date,
+                        })));
+                    }
+                    Err(_) => {
+                        return None;
+                    }
+                }
+            }
+
+            self.prices.load().as_ref().clone()
+        }
+    }
+}
+
+async fn fetch_data_handler(
+    State(state): State<Arc<state::AppState>>,
+) -> Json<Result<state::Prices, String>> {
+    let today = Local::now().date_naive();
+    match state.get_prices(&today).await {
+        Some(prices) => Json(Ok(prices)),
         None => Json(Err("Data not found".into())),
     }
 }
 
 pub(crate) async fn start_web_server() {
-    let state = Arc::new(AppState {
-        prices: ArcSwap::from(Arc::new(None)),
-    });
+    let state = Arc::new(state::AppState::new());
 
     let app = Router::new()
         .route("/", get(fetch_data_handler))
