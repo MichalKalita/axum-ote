@@ -1,5 +1,6 @@
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{extract::State, routing::get, Router};
 use chrono::Local;
+use maud::{html, Markup};
 use std::sync::Arc;
 
 mod state {
@@ -43,13 +44,33 @@ mod state {
     }
 }
 
-async fn fetch_data_handler(
-    State(state): State<Arc<state::AppState>>,
-) -> Json<Result<state::Prices, String>> {
+async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> Markup {
     let today = Local::now().date_naive();
-    match state.get_prices(&today).await {
-        Some(prices) => Json(Ok(prices)),
-        None => Json(Err("Data not found".into())),
+    let prices_content = match state.get_prices(&today).await {
+        Some(prices) => html!(
+            ul {
+                li { (prices.date) }
+                @for (hour, &price) in prices.prices.iter().enumerate() {
+                    li {
+                        (hour)":00 - "(hour)":59: "(price)" EUR/MWh"
+                    }
+                }
+            }
+        ),
+        None => html!(p { "Error fetching data." }),
+    };
+
+    html! {
+        html {
+            head {
+                title { "OTE CR Price Checker" }
+                script src="https://cdn.tailwindcss.com" {}
+            }
+            body {
+                h1 { "Prices" }
+                (prices_content)
+            }
+        }
     }
 }
 
