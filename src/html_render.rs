@@ -18,24 +18,24 @@ impl crate::web_server::state::Prices {
         const GRAPH_HEIGHT: f32 = 300.0;
         const BAR_WIDTH: usize = 24;
         const BAR_SPACING: usize = 1;
-        let scale = GRAPH_HEIGHT / (expensive_hour.1 - cheapiest_hour.1);
-        let zero_offset = GRAPH_HEIGHT - (cheapiest_hour.1 * scale);
+        let scale = if *cheapiest_hour.1 < 0.0 {
+            GRAPH_HEIGHT / (expensive_hour.1 - cheapiest_hour.1)
+        } else {
+            GRAPH_HEIGHT / expensive_hour.1
+        };
+        let zero_offset = (if *cheapiest_hour.1 < 0.0 {
+            GRAPH_HEIGHT - (cheapiest_hour.1 * scale)
+        } else {
+            GRAPH_HEIGHT
+        }) + 15.0;
 
         html! {
-            svg width=(24 * (BAR_WIDTH + BAR_SPACING)) height=(GRAPH_HEIGHT + 20.0) {
-                style { r#"
-                        text {
-                            font: 10px sans-serif;
-                        }
-                        rect {
-                            fill: steelblue;
-                        }
-                    "# }
+            svg width=(24 * (BAR_WIDTH + BAR_SPACING)) height=(GRAPH_HEIGHT + 30.0) {
                 g {
                     @for (hour, &price) in self.prices.iter().enumerate() {
-                        rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale)) width=(BAR_WIDTH) height=(1.0_f32.max(price * scale)) {}
-                        text x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale) - 3.0) {
-                            (price)
+                        rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale)) width=(BAR_WIDTH) height=(1.0_f32.max(price * scale)) .fill-blue-500 {}
+                        text x=(hour * (BAR_WIDTH + BAR_SPACING) + BAR_WIDTH / 2) y=(zero_offset - (price * scale) - 3.0) text-anchor="middle" .font-mono.text-xs {
+                            (format!("{price:.0}"))
                         }
                     }
                 }
