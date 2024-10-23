@@ -99,6 +99,12 @@ async fn perf_handler() -> String {
     let mut sum: i64 = 0;
     for i in 0..100_000_000 {
         sum += i;
+        if sum == 2 {
+            sum = 3;
+        }
+        if sum == 10 {
+            sum = 11;
+        }
     }
     format!("Sum: {}", sum)
 }
