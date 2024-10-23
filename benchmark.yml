@@ -1,0 +1,9 @@
+---
+# base: "https://rust-axum-webserver-production.up.railway.app"
+base: "http://localhost:3000"
+iterations: 100000
+
+plan:
+  - name: Load homepage
+    request:
+      url: /

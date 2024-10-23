@@ -23,6 +23,8 @@ struct Cli {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
 
+    env_logger::init();
+
     if args.web {
         web_server::start_web_server().await;
     } else {

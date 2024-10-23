@@ -1,6 +1,7 @@
-use axum::{extract::State, routing::get, Router};
+use axum::{extract::State, response::IntoResponse, routing::get, Router};
 use chrono::Local;
-use maud::{html, Markup};
+use maud::html;
+use reqwest::StatusCode;
 use std::sync::Arc;
 
 pub(crate) mod state {
@@ -44,31 +45,37 @@ pub(crate) mod state {
     }
 }
 
-async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> Markup {
+async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> impl IntoResponse {
     let today = Local::now().date_naive();
-    let content = match state.get_prices(&today).await {
-        Some(prices) => html!(
-            h1 .text-4xl.font-bold.mb-8 { "OTE prices" }
-            h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-            div .mb-4.flex.justify-center { (prices.render_graph()) }
+    let (status, content) = match state.get_prices(&today).await {
+        Some(prices) => (
+            StatusCode::OK,
+            html!(
+                h1 .text-4xl.font-bold.mb-8 { "OTE prices" }
+                h2 .text-2xl.font-semibold.mb-4 { "Graph" }
+                div .mb-4.flex.justify-center { (prices.render_graph()) }
 
-            h2 .text-2xl.font-semibold.mb-4 { "Table" }
-            div .mb-4.flex.justify-center { (prices.render_table()) }
+                h2 .text-2xl.font-semibold.mb-4 { "Table" }
+                div .mb-4.flex.justify-center { (prices.render_table()) }
+            ),
         ),
-        None => html!(p { "Error fetching data." }),
+        None => (StatusCode::NOT_FOUND, html!(p { "Error fetching data." })),
     };
 
-    html! {
-        html {
-            head {
-                title { "OTE CR Price Checker" }
-                script src="https://cdn.tailwindcss.com" {}
+    (
+        status,
+        html! {
+            html {
+                head {
+                    title { "OTE CR Price Checker" }
+                    script src="https://cdn.tailwindcss.com" {}
+                }
+                body .p-4.text-center {
+                    (content)
+                }
             }
-            body .p-4.text-center {
-                (content)
-            }
-        }
-    }
+        },
+    )
 }
 
 pub(crate) async fn start_web_server() {

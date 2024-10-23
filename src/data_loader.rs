@@ -44,11 +44,29 @@ pub async fn fetch_data(date: NaiveDate) -> Result<[f32; 24], FetchError> {
     let url = format!("https://www.ote-cr.cz/en/short-term-markets/electricity/day-ahead-market/@@chart-data?report_date={}", date);
     info!("Fetching data for date {}", date);
 
+    let start = std::time::Instant::now();
+
     // Create a client
     let client = Client::new();
 
     // Make the GET request
-    let response = client.get(&url).send().await?;
+    let response = client.get(&url).send().await.map_err(|error| {
+        error!(
+            "Request failed {} in {:?} error {}",
+            date,
+            start.elapsed(),
+            error
+        );
+
+        error
+    })?;
+
+    info!(
+        "Request for {} in {:?} status {}",
+        date,
+        start.elapsed(),
+        response.status()
+    );
 
     // Check if the request was successful
     if response.status().is_success() {
