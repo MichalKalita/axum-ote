@@ -83,6 +83,7 @@ pub(crate) async fn start_web_server() {
 
     let app = Router::new()
         .route("/", get(fetch_data_handler))
+        .route("/perf", get(perf_handler))
         .with_state(state);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
@@ -91,4 +92,13 @@ pub(crate) async fn start_web_server() {
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("Web server started on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn perf_handler() -> String {
+    // Make some CPU-bound work
+    let mut sum: i64 = 0;
+    for i in 0..100_000_000 {
+        sum += i;
+    }
+    format!("Sum: {}", sum)
 }
