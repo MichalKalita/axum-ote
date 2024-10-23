@@ -78,9 +78,10 @@ pub(crate) async fn start_web_server() {
         .route("/", get(fetch_data_handler))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("Web server started on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }
