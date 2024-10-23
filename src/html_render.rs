@@ -1,0 +1,80 @@
+use maud::{html, Markup};
+
+impl crate::web_server::state::Prices {
+    pub(crate) fn render_graph(&self) -> Markup {
+        let cheapiest_hour = self
+            .prices
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .unwrap();
+        let expensive_hour = self
+            .prices
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .unwrap();
+
+        const GRAPH_HEIGHT: f32 = 300.0;
+        const BAR_WIDTH: usize = 24;
+        const BAR_SPACING: usize = 1;
+        let scale = GRAPH_HEIGHT / (expensive_hour.1 - cheapiest_hour.1);
+        let zero_offset = GRAPH_HEIGHT - (cheapiest_hour.1 * scale);
+
+        html! {
+            svg width=(24 * (BAR_WIDTH + BAR_SPACING)) height=(GRAPH_HEIGHT + 20.0) {
+                style { r#"
+                        text {
+                            font: 10px sans-serif;
+                        }
+                        rect {
+                            fill: steelblue;
+                        }
+                    "# }
+                g {
+                    @for (hour, &price) in self.prices.iter().enumerate() {
+                        rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale)) width=(BAR_WIDTH) height=(1.0_f32.max(price * scale)) {}
+                        text x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale) - 3.0) {
+                            (price)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn render_table(&self) -> Markup {
+        let cheapiest_hour = self
+            .prices
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .unwrap()
+            .0;
+        let expensive_hour = self
+            .prices
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .unwrap()
+            .0;
+        html! {
+            table {
+                tr {
+                    th { "Hour" }
+                    th { "Price EUR/MWh" }
+                }
+                @for (hour, &price) in self.prices.iter().enumerate() {
+                    tr .bg-green-100[hour == cheapiest_hour] .bg-red-100[hour == expensive_hour] {
+                        td .text-center .font-mono {
+                            (hour)" - "(hour+1)
+                        }
+                        td .text-right .text-green-700[price<0.0] .font-mono {
+                            (format!("{:2.2}", price))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -3,7 +3,7 @@ use chrono::Local;
 use maud::{html, Markup};
 use std::sync::Arc;
 
-mod state {
+pub(crate) mod state {
     use crate::data_loader::fetch_data;
     use arc_swap::ArcSwap;
     use serde::Serialize;
@@ -46,16 +46,14 @@ mod state {
 
 async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> Markup {
     let today = Local::now().date_naive();
-    let prices_content = match state.get_prices(&today).await {
+    let content = match state.get_prices(&today).await {
         Some(prices) => html!(
-            ul {
-                li { (prices.date) }
-                @for (hour, &price) in prices.prices.iter().enumerate() {
-                    li {
-                        (hour)":00 - "(hour)":59: "(price)" EUR/MWh"
-                    }
-                }
-            }
+            h1 .text-4xl.font-bold.mb-8 { "OTE prices" }
+            h2 .text-2xl.font-semibold.mb-4 { "Graph" }
+            div .mb-4.flex.justify-center { (prices.render_graph()) }
+
+            h2 .text-2xl.font-semibold.mb-4 { "Table" }
+            div .mb-4.flex.justify-center { (prices.render_table()) }
         ),
         None => html!(p { "Error fetching data." }),
     };
@@ -66,9 +64,8 @@ async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> Markup
                 title { "OTE CR Price Checker" }
                 script src="https://cdn.tailwindcss.com" {}
             }
-            body {
-                h1 { "Prices" }
-                (prices_content)
+            body .p-4.text-center {
+                (content)
             }
         }
     }

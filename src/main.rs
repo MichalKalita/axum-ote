@@ -1,4 +1,5 @@
 mod data_loader;
+mod html_render;
 mod web_server;
 
 use chrono::Local;
