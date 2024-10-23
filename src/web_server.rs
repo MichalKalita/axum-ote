@@ -97,7 +97,7 @@ pub(crate) async fn start_web_server() {
 async fn perf_handler() -> String {
     // Make some CPU-bound work
     let mut sum: i64 = 0;
-    for i in 0..100_000_000 {
+    for i in 0..1_000_000_000 {
         sum += i;
         if sum == 2 {
             sum = 3;
