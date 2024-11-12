@@ -15,6 +15,24 @@ pub(crate) mod state {
         // pub date: chrono::NaiveDate,
     }
 
+    impl DayPrices {
+        pub(crate) fn cheapest_hour(&self) -> (usize, &f32) {
+            self.prices
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .unwrap()
+        }
+
+        pub(crate) fn expensive_hour(&self) -> (usize, &f32) {
+            self.prices
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .unwrap()
+        }
+    }
+
     pub struct AppState {
         days: DashMap<chrono::NaiveDate, DayPrices>,
     }

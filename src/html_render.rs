@@ -2,18 +2,8 @@ use maud::{html, Markup};
 
 impl crate::web_server::state::DayPrices {
     pub(crate) fn render_graph(&self) -> Markup {
-        let cheapiest_hour = self
-            .prices
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .unwrap();
-        let expensive_hour = self
-            .prices
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .unwrap();
+        let cheapiest_hour = self.cheapest_hour();
+        let expensive_hour = self.expensive_hour();
 
         const GRAPH_HEIGHT: f32 = 300.0;
         const BAR_WIDTH: usize = 24;
@@ -44,20 +34,9 @@ impl crate::web_server::state::DayPrices {
     }
 
     pub(crate) fn render_table(&self) -> Markup {
-        let cheapiest_hour = self
-            .prices
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .unwrap()
-            .0;
-        let expensive_hour = self
-            .prices
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .unwrap()
-            .0;
+        let cheapiest_hour = self.cheapest_hour().0;
+        let expensive_hour = self.expensive_hour().0;
+
         html! {
             table {
                 tr {
