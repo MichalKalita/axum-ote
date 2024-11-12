@@ -1,6 +1,6 @@
 use maud::{html, Markup};
 
-impl crate::web_server::state::Prices {
+impl crate::web_server::state::DayPrices {
     pub(crate) fn render_graph(&self) -> Markup {
         let cheapiest_hour = self
             .prices
@@ -34,7 +34,7 @@ impl crate::web_server::state::Prices {
                 g {
                     @for (hour, &price) in self.prices.iter().enumerate() {
                         rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale)) width=(BAR_WIDTH) height=(1.0_f32.max(price * scale)) .fill-blue-500 {}
-                        text x=(hour * (BAR_WIDTH + BAR_SPACING) + BAR_WIDTH / 2) y=(zero_offset - (price * scale) - 3.0) text-anchor="middle" .font-mono.text-xs {
+                        text x=(hour * (BAR_WIDTH + BAR_SPACING) + BAR_WIDTH / 2) y=(zero_offset - (price * scale) - 3.0) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
                             (format!("{price:.0}"))
                         }
                     }
@@ -65,7 +65,13 @@ impl crate::web_server::state::Prices {
                     th { "Price EUR/MWh" }
                 }
                 @for (hour, &price) in self.prices.iter().enumerate() {
-                    tr .bg-green-100[hour == cheapiest_hour] .bg-red-100[hour == expensive_hour] {
+                    tr
+                        ."bg-green-100"[hour == cheapiest_hour]
+                        ."dark:bg-green-900"[hour == cheapiest_hour]
+                        .bg-red-100[hour == expensive_hour]
+                        ."dark:bg-red-900"[hour == expensive_hour]
+                    {
+
                         td .text-center .font-mono {
                             (hour)" - "(hour+1)
                         }

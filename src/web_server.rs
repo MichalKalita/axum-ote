@@ -6,33 +6,32 @@ use std::sync::Arc;
 
 pub(crate) mod state {
     use crate::data_loader::fetch_data;
-    use arc_swap::ArcSwap;
+    use dashmap::DashMap;
     use serde::Serialize;
-    use std::sync::Arc;
 
     #[derive(Serialize, Clone)]
-    pub struct Prices {
+    pub struct DayPrices {
         pub prices: [f32; 24],
-        pub date: chrono::NaiveDate,
+        // pub date: chrono::NaiveDate,
     }
+
     pub struct AppState {
-        prices: ArcSwap<Option<Prices>>,
+        days: DashMap<chrono::NaiveDate, DayPrices>,
     }
 
     impl AppState {
         pub fn new() -> Self {
             Self {
-                prices: ArcSwap::from(Arc::new(None)),
+                days: DashMap::new(),
             }
         }
-        pub async fn get_prices(&self, date: &chrono::NaiveDate) -> Option<Prices> {
-            if self.prices.load().is_none() {
+        pub async fn get_prices(&self, date: &chrono::NaiveDate) -> Option<DayPrices> {
+            if !self.days.contains_key(date) {
                 match fetch_data(*date).await {
                     Ok(prices) => {
-                        self.prices.store(Arc::new(Some(Prices {
-                            prices,
-                            date: *date,
-                        })));
+                        self.days.insert(*date, DayPrices { prices });
+
+                        return Some(DayPrices { prices });
                     }
                     Err(_) => {
                         return None;
@@ -40,7 +39,7 @@ pub(crate) mod state {
                 }
             }
 
-            self.prices.load().as_ref().clone()
+            self.days.get(date).map(|i| i.value().clone())
         }
     }
 }
@@ -70,7 +69,7 @@ async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> impl I
                     title { "OTE CR Price Checker" }
                     script src="https://cdn.tailwindcss.com" {}
                 }
-                body .p-4.text-center {
+                body .p-4.text-center."dark:bg-gray-900"."dark:text-gray-300" {
                     (content)
                 }
             }

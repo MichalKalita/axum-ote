@@ -1,9 +1,14 @@
 ---
-# base: "https://rust-axum-webserver-production.up.railway.app"
-base: "http://localhost:3000"
-iterations: 100000
+base: "https://rust-axum-webserver-production.up.railway.app"
+# base: "http://localhost:3000"
+iterations: 10
+timeout: 3
 
 plan:
   - name: Load homepage
     request:
       url: /
+
+  - name: CPU heavy task
+    request:
+      url: /perf
