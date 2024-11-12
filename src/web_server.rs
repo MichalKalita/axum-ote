@@ -1,7 +1,13 @@
-use axum::{extract::State, response::IntoResponse, routing::get, Router};
-use chrono::Local;
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use chrono::{Local, NaiveDate};
 use maud::html;
 use reqwest::StatusCode;
+use serde::Deserialize;
 use std::sync::Arc;
 
 pub(crate) mod state {
@@ -62,13 +68,28 @@ pub(crate) mod state {
     }
 }
 
-async fn fetch_data_handler(State(state): State<Arc<state::AppState>>) -> impl IntoResponse {
+#[derive(Deserialize)]
+struct QueryParams {
+    date: Option<NaiveDate>,
+}
+
+async fn fetch_data_handler(
+    State(state): State<Arc<state::AppState>>,
+    query: Query<QueryParams>,
+) -> impl IntoResponse {
     let today = Local::now().date_naive();
-    let (status, content) = match state.get_prices(&today).await {
+    let input_date = query.date.unwrap_or(today);
+
+    let (status, content) = match state.get_prices(&input_date).await {
         Some(prices) => (
             StatusCode::OK,
             html!(
-                h1 .text-4xl.font-bold.mb-8 { "OTE prices" }
+                h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date) }
+                    a href={"/?date=" (input_date - chrono::Duration::days(1))} { "Previous day" }
+                    " | "
+                    a href="/" { "today (" (today) ")" }
+                    " | "
+                    a href={"/?date=" (input_date + chrono::Duration::days(1))} { "Next day" }
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
                 div .mb-4.flex.justify-center { (prices.render_graph()) }
 
