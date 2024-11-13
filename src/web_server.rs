@@ -37,16 +37,51 @@ pub(crate) mod state {
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
                 .unwrap()
         }
+
+        pub fn total_prices(&self, dist: &Distribution) -> [f32; 24] {
+            let mut prices = self.prices.clone();
+            for (i, price) in prices.iter_mut().enumerate() {
+                if dist.high_hours.contains(&(i as u8)) {
+                    *price += dist.high_price;
+                } else {
+                    *price += dist.low_price;
+                }
+            }
+
+            prices
+        }
+    }
+
+    pub struct Distribution {
+        pub high_hours: Vec<u8>,
+        pub high_price: f32,
+        pub low_price: f32,
+    }
+
+    impl Distribution {
+        pub fn by_hours(&self) -> [bool; 24] {
+            let mut distribution = [false; 24];
+            for hour in self.high_hours.iter() {
+                distribution[*hour as usize] = true;
+            }
+            distribution
+        }
     }
 
     pub struct AppState {
-        days: DashMap<chrono::NaiveDate, DayPrices>,
+        pub days: DashMap<chrono::NaiveDate, DayPrices>,
+        pub distribution: Distribution,
     }
 
     impl AppState {
         pub fn new() -> Self {
             Self {
                 days: DashMap::new(),
+                distribution: Distribution {
+                    high_hours: vec![10, 12, 14, 17],
+                    high_price: 648.0 / 25.29,
+                    low_price: 438.0 / 25.29,
+                },
             }
         }
         pub async fn get_prices(&self, date: &chrono::NaiveDate) -> Option<DayPrices> {
@@ -91,10 +126,10 @@ async fn fetch_data_handler(
                     " | "
                     a href={"/?date=" (input_date + chrono::Duration::days(1))} { "Next day" }
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (prices.render_graph()) }
+                div .mb-4.flex.justify-center { (prices.render_graph(&state.distribution)) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
-                div .mb-4.flex.justify-center { (prices.render_table()) }
+                div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }
             ),
         ),
         None => (StatusCode::NOT_FOUND, html!(p { "Error fetching data." })),
