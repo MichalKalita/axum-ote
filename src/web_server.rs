@@ -10,7 +10,11 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use crate::html_render::render_layout;
+
 pub(crate) mod state {
+    use core::f32;
+
     use crate::data_loader::fetch_data;
     use dashmap::DashMap;
     use serde::Serialize;
@@ -100,7 +104,48 @@ pub(crate) mod state {
 
             self.days.get(date).map(|i| i.value().clone())
         }
+
+        /// Find the cheapest hours in row for the next days, return first of them
+        pub async fn find_cheapiest_hours(&self, hours: u8) -> Option<u8> {
+            let date = chrono::Local::now().date_naive();
+            let prices = self.get_prices(&date).await;
+            if prices.is_none() {
+                return None;
+            }
+
+            let prices = prices.unwrap().prices;
+            let mut hour = 0u8;
+            let mut cheapist_price = f32::MAX;
+
+            for i in 0..(24 - hours) {
+                let total_price: f32 = prices.iter().skip(i as usize).take(hours as usize).sum();
+
+                if total_price < cheapist_price {
+                    cheapist_price = total_price;
+                    hour = i;
+                }
+            }
+
+            Some(hour)
+        }
     }
+}
+
+pub(crate) async fn start_web_server() {
+    let state = Arc::new(state::AppState::new());
+
+    let app = Router::new()
+        .route("/", get(fetch_data_handler))
+        .route("/optimalizer", get(optimalizer_handler))
+        .route("/perf", get(perf_handler))
+        .with_state(state);
+
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    println!("Web server started on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
 }
 
 #[derive(Deserialize)]
@@ -135,36 +180,35 @@ async fn fetch_data_handler(
         None => (StatusCode::NOT_FOUND, html!(p { "Error fetching data." })),
     };
 
-    (
-        status,
-        html! {
-            html {
-                head {
-                    title { "OTE CR Price Checker" }
-                    script src="https://cdn.tailwindcss.com" {}
-                }
-                body .p-4.text-center."dark:bg-gray-900"."dark:text-gray-300" {
-                    (content)
-                }
-            }
-        },
-    )
+    (status, render_layout(content))
 }
 
-pub(crate) async fn start_web_server() {
-    let state = Arc::new(state::AppState::new());
+#[derive(Deserialize)]
+struct OptimalizerQuery {
+    hours: Option<u8>,
+}
 
-    let app = Router::new()
-        .route("/", get(fetch_data_handler))
-        .route("/perf", get(perf_handler))
-        .with_state(state);
+async fn optimalizer_handler(
+    State(state): State<Arc<state::AppState>>,
+    query: Query<OptimalizerQuery>,
+) -> impl IntoResponse {
+    // Form with numbers of hours in row to cheapist price
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-    let addr = format!("0.0.0.0:{}", port);
+    let hours = query.hours.unwrap_or(1);
+    let start_cheapiest = state.find_cheapiest_hours(hours).await;
 
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    println!("Web server started on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    let content = html!(
+        h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
+        form {
+            label for="hours" { "Number of hours" }
+            input type="number" name="hours" min="1" max="24" value=(hours);
+            button type="submit" { "Submit" }
+        }
+
+        h2 .text-2xl.font-semibold.mb-4 { "Cheapest hours starts in " (start_cheapiest.unwrap_or(0)) " hour" }
+    );
+
+    render_layout(content)
 }
 
 async fn perf_handler() -> String {

@@ -2,6 +2,20 @@ use maud::{html, Markup};
 
 use crate::web_server::state::Distribution;
 
+pub fn render_layout(content: Markup) -> Markup {
+    html! {
+        html {
+            head {
+                title { "OTE CR Price Checker" }
+                script src="https://cdn.tailwindcss.com" {}
+            }
+            body .p-4.text-center."dark:bg-gray-900"."dark:text-gray-300" {
+                (content)
+            }
+        }
+    }
+}
+
 impl crate::web_server::state::DayPrices {
     pub(crate) fn render_graph(&self, dist: &Distribution) -> Markup {
         let cheapiest_hour = self.cheapest_hour();
