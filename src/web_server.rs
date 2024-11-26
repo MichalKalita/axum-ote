@@ -4,7 +4,7 @@ use axum::{
     routing::get,
     Router,
 };
-use chrono::{Local, NaiveDate};
+use chrono::{Local, NaiveDate, Timelike};
 use maud::html;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -157,8 +157,16 @@ async fn fetch_data_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<QueryParams>,
 ) -> impl IntoResponse {
-    let today = Local::now().date_naive();
+    let now = Local::now();
+    let today = now.date_naive();
     let input_date = query.date.unwrap_or(today);
+
+    let hour = now.time().hour() as usize;
+    let active_hour = if input_date == today {
+        hour
+    } else {
+        usize::MAX
+    };
 
     let (status, content) = match state.get_prices(&input_date).await {
         Some(prices) => (
@@ -171,7 +179,7 @@ async fn fetch_data_handler(
                     " | "
                     a href={"/?date=" (input_date + chrono::Duration::days(1))} { "Next day" }
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (prices.render_graph(&state.distribution)) }
+                div .mb-4.flex.justify-center { (prices.render_graph(&state.distribution, active_hour)) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
                 div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }

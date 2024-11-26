@@ -17,7 +17,7 @@ pub fn render_layout(content: Markup) -> Markup {
 }
 
 impl crate::web_server::state::DayPrices {
-    pub(crate) fn render_graph(&self, dist: &Distribution) -> Markup {
+    pub(crate) fn render_graph(&self, dist: &Distribution, active_hour: usize) -> Markup {
         let cheapiest_hour = self.cheapest_hour();
         let expensive_hour = self.expensive_hour();
 
@@ -36,12 +36,15 @@ impl crate::web_server::state::DayPrices {
         }) + 15.0;
 
         let dist_high_hours = dist.by_hours();
+        let active_hour_index = active_hour - 1;
 
         html! {
             svg width=(24 * (BAR_WIDTH + BAR_SPACING)) height=(GRAPH_HEIGHT + 30.0) {
                 g {
                     @for (hour, &price) in self.prices.iter().enumerate() {
-                        rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale)) width=(BAR_WIDTH) height=(1.0_f32.max(price * scale)) .fill-blue-500 {}
+                        rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale))
+                            width=(BAR_WIDTH) height=(1.0_f32.max(price * scale))
+                            .fill-blue-500[active_hour_index != hour] .fill-green-500[active_hour_index == hour] {}
                         text x=(hour * (BAR_WIDTH + BAR_SPACING) + BAR_WIDTH / 2) y=(zero_offset - (price * scale) - 3.0) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
                             (format!("{price:.0}"))
                         }
