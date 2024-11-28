@@ -1,6 +1,6 @@
 use maud::{html, Markup};
 
-use crate::web_server::state::Distribution;
+use crate::web_server::state::{Distribution, PriceStats};
 
 pub fn render_layout(content: Markup) -> Markup {
     html! {
@@ -18,18 +18,19 @@ pub fn render_layout(content: Markup) -> Markup {
 
 impl crate::web_server::state::DayPrices {
     pub(crate) fn render_graph(&self, dist: &Distribution, active_hour: usize) -> Markup {
-        let cheapiest_hour = self.cheapest_hour();
-        let expensive_hour = self.expensive_hour();
+        let prices = self.total_prices(&dist);
+        let cheapiest_hour = prices.cheapest_hour();
+        let expensive_hour = prices.expensive_hour();
 
         const GRAPH_HEIGHT: f32 = 300.0;
         const BAR_WIDTH: usize = 24;
         const BAR_SPACING: usize = 1;
-        let scale = if *cheapiest_hour.1 < 0.0 {
+        let scale = if cheapiest_hour.1 < 0.0 {
             GRAPH_HEIGHT / (expensive_hour.1 - cheapiest_hour.1)
         } else {
             GRAPH_HEIGHT / expensive_hour.1
         };
-        let zero_offset = (if *cheapiest_hour.1 < 0.0 {
+        let zero_offset = (if cheapiest_hour.1 < 0.0 {
             GRAPH_HEIGHT - (cheapiest_hour.1 * scale)
         } else {
             GRAPH_HEIGHT
@@ -41,7 +42,7 @@ impl crate::web_server::state::DayPrices {
         html! {
             svg width=(24 * (BAR_WIDTH + BAR_SPACING)) height=(GRAPH_HEIGHT + 30.0) {
                 g {
-                    @for (hour, &price) in self.prices.iter().enumerate() {
+                    @for (hour, &price) in prices.iter().enumerate() {
                         rect x=(hour * (BAR_WIDTH + BAR_SPACING)) y=(zero_offset - (price * scale))
                             width=(BAR_WIDTH) height=(1.0_f32.max(price * scale))
                             .fill-blue-500[active_hour_index != hour] .fill-green-500[active_hour_index == hour] {}

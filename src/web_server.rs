@@ -25,23 +25,30 @@ pub(crate) mod state {
         // pub date: chrono::NaiveDate,
     }
 
-    impl DayPrices {
-        pub(crate) fn cheapest_hour(&self) -> (usize, &f32) {
-            self.prices
-                .iter()
+    pub trait PriceStats {
+        fn cheapest_hour(&self) -> (usize, f32);
+        fn expensive_hour(&self) -> (usize, f32);
+    }
+
+    impl PriceStats for [f32; 24] {
+        fn cheapest_hour(&self) -> (usize, f32) {
+            self.iter()
                 .enumerate()
                 .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(index, price)| (index, price.clone()))
                 .unwrap()
         }
 
-        pub(crate) fn expensive_hour(&self) -> (usize, &f32) {
-            self.prices
-                .iter()
+        fn expensive_hour(&self) -> (usize, f32) {
+            self.iter()
                 .enumerate()
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(index, price)| (index, price.clone()))
                 .unwrap()
         }
+    }
 
+    impl DayPrices {
         pub fn total_prices(&self, dist: &Distribution) -> [f32; 24] {
             let mut prices = self.prices.clone();
             for (i, price) in prices.iter_mut().enumerate() {
