@@ -37,7 +37,7 @@ impl crate::web_server::state::DayPrices {
         }) + 15.0;
 
         let dist_high_hours = dist.by_hours();
-        let active_hour_index = active_hour - 1;
+        let active_hour_index = active_hour;
 
         html! {
             svg width=(24 * (BAR_WIDTH + BAR_SPACING)) height=(GRAPH_HEIGHT + 30.0) {
