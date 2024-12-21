@@ -1,14 +1,15 @@
 use axum::{
     extract::{Query, State},
-    response::IntoResponse,
+    response::{IntoResponse, Json},
     routing::get,
     Router,
 };
 use chrono::{Local, NaiveDate, Timelike};
-use logic::Expression;
+use log::debug;
+use logic::Eval;
 use maud::html;
 use reqwest::StatusCode;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::html_render::render_layout;
@@ -17,8 +18,11 @@ pub(crate) mod state {
     use core::f32;
 
     use crate::data_loader::fetch_data;
+    use chrono::Timelike;
     use dashmap::DashMap;
     use serde::Serialize;
+
+    use super::logic::{EvaluateContext, ExpressionRequirements};
 
     #[derive(Serialize, Clone)]
     pub struct DayPrices {
@@ -136,6 +140,31 @@ pub(crate) mod state {
 
             Some(hour)
         }
+
+        pub async fn expression_context(
+            &self,
+            requirements: super::logic::ExpressionRequirements,
+        ) -> Option<super::logic::EvaluateContext> {
+            let now = chrono::Local::now();
+            let date = now.date_naive();
+            let hour = now.time().hour();
+            let prices = self.get_prices(&date).await?.prices;
+
+            match requirements {
+                ExpressionRequirements {
+                    hours_ago,
+                    hours_future,
+                } if hours_ago == 0 && hours_future == 0 => Some(EvaluateContext::new(
+                    prices.to_vec(),
+                    hour.try_into().unwrap(),
+                )),
+
+                ExpressionRequirements {
+                    hours_ago,
+                    hours_future,
+                } => todo!(),
+            }
+        }
     }
 }
 
@@ -248,27 +277,40 @@ async fn perf_handler() -> String {
 }
 
 pub(crate) mod logic {
-    use serde::Deserialize;
+    use std::ops;
 
-    #[derive(Deserialize)]
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Clone)]
     pub enum Expression {
+        #[serde(rename = "and")]
         And(Box<Expression>, Box<Expression>),
+        #[serde(rename = "or")]
         Or(Box<Expression>, Box<Expression>),
+        #[serde(rename = "not")]
         Not(Box<Expression>),
+        #[serde(rename = "if")]
         Condition(Condition),
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize, Clone, Copy)]
     pub enum Condition {
+        #[serde(rename = "price")]
         PriceLowerThan(f32),
-        PercentileLowerThanInRange(f32, Range),
+        #[serde(rename = "percentile")]
+        Percentile(f32),
+        PercentileInRange(f32, Range),
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize, Clone, Copy)]
     pub enum Range {
+        #[serde(rename = "today")]
         Today,
+        #[serde(rename = "future")]
         Future,
+        #[serde(rename = "range")]
         PlusMinusHours(u8),
+        #[serde(rename = "static")]
         StaticHours(u8, u8),
     }
 
@@ -468,34 +510,98 @@ pub(crate) mod logic {
         }
     }
 
-    pub trait EvaluateExpression {
-        fn evaluate_expression(&self, exp: &Expression) -> bool;
-        fn evaluate_condition(&self, cond: &Condition) -> bool;
+    pub trait Eval {
+        fn evaluate(&self, ctx: &EvaluateContext) -> bool;
     }
 
-    struct EvaluateContext {
+    impl Eval for Expression {
+        fn evaluate(&self, ctx: &EvaluateContext) -> bool {
+            match self {
+                Expression::And(a, b) => a.evaluate(ctx) && b.evaluate(ctx),
+                Expression::Or(a, b) => a.evaluate(ctx) || b.evaluate(ctx),
+                Expression::Not(a) => !a.evaluate(ctx),
+                Expression::Condition(cond) => cond.evaluate(ctx),
+            }
+        }
+    }
+
+    impl Eval for Condition {
+        fn evaluate(&self, ctx: &EvaluateContext) -> bool {
+            match self {
+                Condition::PriceLowerThan(price) => ctx.prices[ctx.target_price_index] <= *price,
+                Condition::PercentileInRange(target_percentile, range) => {
+                    let calculated_percentile = range.apply(&ctx).percentile();
+                    calculated_percentile <= *target_percentile
+                }
+                Condition::Percentile(target_percentile) => {
+                    Condition::PercentileInRange(*target_percentile, Range::Today).evaluate(ctx)
+                }
+            }
+        }
+    }
+
+    #[derive(Serialize, Debug)]
+    pub(crate) struct EvaluateContext {
         // start_date: chrono::NaiveDate,
         prices: Vec<f32>,
         target_price_index: usize,
     }
 
-    impl EvaluateExpression for EvaluateContext {
-        fn evaluate_expression(&self, exp: &Expression) -> bool {
-            match exp {
-                Expression::And(a, b) => self.evaluate_expression(a) && self.evaluate_expression(b),
-                Expression::Or(a, b) => self.evaluate_expression(a) || self.evaluate_expression(b),
-                Expression::Not(a) => !self.evaluate_expression(a),
-                Expression::Condition(cond) => self.evaluate_condition(cond),
+    impl EvaluateContext {
+        pub(crate) fn new(prices: Vec<f32>, target_price_index: usize) -> Self {
+            Self {
+                prices,
+                target_price_index,
             }
         }
+    }
 
-        fn evaluate_condition(&self, cond: &Condition) -> bool {
-            match cond {
-                Condition::PriceLowerThan(price) => self.prices[self.target_price_index] <= *price,
-                Condition::PercentileLowerThanInRange(target_percentile, range) => {
-                    let calculated_percentile = range.apply(&self).percentile();
-                    calculated_percentile <= *target_percentile
+    pub(crate) struct ExpressionRequirements {
+        pub hours_ago: u8,
+        pub hours_future: u8,
+    }
+
+    impl ExpressionRequirements {
+        pub(crate) fn new(hours_ago: u8, hours_future: u8) -> Self {
+            Self {
+                hours_ago,
+                hours_future,
+            }
+        }
+    }
+
+    impl ops::Add<ExpressionRequirements> for ExpressionRequirements {
+        type Output = ExpressionRequirements;
+
+        fn add(self, rhs: ExpressionRequirements) -> Self::Output {
+            ExpressionRequirements {
+                hours_ago: self.hours_ago.max(rhs.hours_ago),
+                hours_future: self.hours_future.max(rhs.hours_future),
+            }
+        }
+    }
+
+    impl From<&Expression> for ExpressionRequirements {
+        fn from(value: &Expression) -> Self {
+            match value {
+                Expression::And(a, b) | Expression::Or(a, b) => {
+                    let a: ExpressionRequirements = (&**a).into();
+                    let b: ExpressionRequirements = (&**b).into();
+
+                    a + b
                 }
+                Expression::Not(exp) => {
+                    let exp: ExpressionRequirements = (&**exp).into();
+
+                    exp
+                }
+                Expression::Condition(Condition::PercentileInRange(_, range)) => match range {
+                    Range::Today => todo!(),
+                    Range::Future => todo!(),
+                    Range::PlusMinusHours(x) => ExpressionRequirements::new(*x, *x),
+                    Range::StaticHours(_, _) => todo!(),
+                },
+                Expression::Condition(_) => ExpressionRequirements::new(0, 0),
             }
         }
     }
@@ -503,15 +609,47 @@ pub(crate) mod logic {
 
 #[derive(Deserialize)]
 struct ConditionQuery {
-    exp: logic::Expression,
+    exp: String,
+}
+
+#[derive(Serialize)]
+struct ConditionResult {
+    result: bool,
+    input: logic::Expression,
+    context: logic::EvaluateContext,
 }
 
 async fn expression_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<ConditionQuery>,
-) -> impl IntoResponse {
-    // let result = state.evaluate_expression(&query.exp);
+) -> Result<Json<ConditionResult>, (StatusCode, String)> {
+    let expression = match serde_json::from_str::<logic::Expression>(query.exp.as_str()) {
+        Ok(data) => data,
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Expression is not valid".to_string(),
+            ))
+        }
+    };
 
-    // (StatusCode::OK, format!("Result: {}", result))
-    (StatusCode::OK, "Not implemented yet")
+    let requirements: logic::ExpressionRequirements = (&expression).into();
+
+    let exp_context = match state.expression_context(requirements).await {
+        Some(context) => context,
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error creating expression context".to_string(),
+            ))
+        }
+    };
+
+    let result = expression.evaluate(&exp_context);
+
+    Ok(Json(ConditionResult {
+        result,
+        input: expression,
+        context: exp_context,
+    }))
 }
