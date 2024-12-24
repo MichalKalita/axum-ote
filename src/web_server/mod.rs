@@ -10,6 +10,7 @@ use axum::{
 };
 use chrono::{Local, NaiveDate, Timelike};
 use conditions::Eval;
+use json5;
 use maud::html;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -141,7 +142,7 @@ async fn condition_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<ConditionQuery>,
 ) -> Result<Json<ConditionResult>, (StatusCode, String)> {
-    let expression = match serde_json::from_str::<conditions::Expression>(query.exp.as_str()) {
+    let expression = match json5::from_str::<conditions::Expression>(query.exp.as_str()) {
         Ok(data) => data,
         Err(_) => {
             return Err((
