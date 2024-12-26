@@ -9,7 +9,7 @@ use axum::{
     Router,
 };
 use chrono::{Local, NaiveDate, Timelike};
-use conditions::Eval;
+use conditions::{Condition, Eval};
 use json5;
 use maud::html;
 use reqwest::StatusCode;
@@ -134,7 +134,7 @@ struct ConditionQuery {
 #[derive(Serialize)]
 struct ConditionResult {
     result: bool,
-    input: conditions::Expression,
+    input: Condition,
     context: conditions::EvaluateContext,
 }
 
@@ -142,7 +142,7 @@ async fn condition_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<ConditionQuery>,
 ) -> Result<Json<ConditionResult>, (StatusCode, String)> {
-    let expression = match json5::from_str::<conditions::Expression>(query.exp.as_str()) {
+    let expression = match json5::from_str::<Condition>(query.exp.as_str()) {
         Ok(data) => data,
         Err(_) => {
             return Err((

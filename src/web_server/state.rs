@@ -138,6 +138,7 @@ impl AppState {
                 hours_ago,
                 hours_future,
             } if hours_ago == 0 && hours_future == 0 => Some(EvaluateContext::new(
+                now.naive_local(),
                 prices.to_vec(),
                 hour.try_into().unwrap(),
             )),
