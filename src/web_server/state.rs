@@ -5,7 +5,7 @@ use chrono::Timelike;
 use dashmap::DashMap;
 use serde::Serialize;
 
-use super::conditions::{EvaluateContext, ExpressionRequirements};
+use super::conditions::EvaluateContext;
 
 #[derive(Serialize, Clone)]
 pub struct DayPrices {
@@ -124,29 +124,16 @@ impl AppState {
         Some(hour)
     }
 
-    pub async fn expression_context(
-        &self,
-        requirements: super::conditions::ExpressionRequirements,
-    ) -> Option<super::conditions::EvaluateContext> {
+    pub async fn expression_context(&self) -> Option<super::conditions::EvaluateContext> {
         let now = chrono::Local::now();
         let date = now.date_naive();
         let hour = now.time().hour();
         let prices = self.get_prices(&date).await?.prices;
 
-        match requirements {
-            ExpressionRequirements {
-                hours_ago,
-                hours_future,
-            } if hours_ago == 0 && hours_future == 0 => Some(EvaluateContext::new(
-                now.naive_local(),
-                prices.to_vec(),
-                hour.try_into().unwrap(),
-            )),
-
-            ExpressionRequirements {
-                hours_ago: _,
-                hours_future: _,
-            } => todo!(),
-        }
+        Some(EvaluateContext::new(
+            now.naive_local(),
+            prices.to_vec(),
+            hour.try_into().unwrap(),
+        ))
     }
 }

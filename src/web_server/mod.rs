@@ -152,9 +152,7 @@ async fn condition_handler(
         }
     };
 
-    let requirements: conditions::ExpressionRequirements = (&expression).into();
-
-    let exp_context = match state.expression_context(requirements).await {
+    let exp_context = match state.expression_context().await {
         Some(context) => context,
         None => {
             return Err((
