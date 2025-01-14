@@ -1,3 +1,4 @@
+mod builder;
 mod conditions;
 mod html_render;
 mod state;
@@ -10,10 +11,10 @@ use axum::{
 };
 use chrono::{Local, NaiveDate, Timelike};
 use conditions::{Condition, Eval};
-use json5;
 use maud::html;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+
 use std::sync::Arc;
 
 use html_render::render_layout;
@@ -21,7 +22,7 @@ use html_render::render_layout;
 fn create_app(state: state::AppState) -> Router {
     Router::new()
         .route("/", get(fetch_data_handler))
-        .route("/optimalizer", get(optimalizer_handler))
+        .route("/builder", get(builder_handler))
         .route("/exp", get(condition_handler))
         .route("/perf", get(perf_handler))
         .with_state(Arc::new(state))
@@ -85,30 +86,46 @@ async fn fetch_data_handler(
 
 #[derive(Deserialize)]
 struct OptimalizerQuery {
-    hours: Option<u8>,
+    exp: Option<String>,
 }
 
-async fn optimalizer_handler(
+async fn builder_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<OptimalizerQuery>,
 ) -> impl IntoResponse {
-    // Form with numbers of hours in row to cheapist price
+    let condition = query.exp.as_ref().map(|exp| Condition::try_from(exp));
 
-    let hours = query.hours.unwrap_or(1);
-    let start_cheapiest = state.find_cheapiest_hours(hours).await;
+    let condition = match condition {
+        Some(Ok(data)) => data,
+        Some(Err(err)) => return Err(format!("Error parsing expression: {}", err)),
+        None => Condition::And(vec![]),
+    };
+
+    let exp_context = match state.expression_context().await {
+        Some(context) => context,
+        None => return Err("Error creating expression context".into()),
+    };
 
     let content = html!(
         h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
-        form {
-            label for="hours" { "Number of hours" }
-            input type="number" name="hours" min="1" max="24" value=(hours);
-            button type="submit" { "Submit" }
+
+        h2 .text-2xl.font-semibold.mb-4 { "Actual expression" }
+        pre {
+            (format!("{:?}", condition))
         }
 
-        h2 .text-2xl.font-semibold.mb-4 { "Cheapest hours starts in " (start_cheapiest.unwrap_or(0)) " hour" }
+        h2 .text-2xl.font-semibold.mb-4 { "Result" }
+        pre {
+            (format!("{:?}", condition.evaluate(&exp_context)))
+        }
+
+        h2 .text-2xl.font-semibold.mb-4 { "Builder" }
+        div .builder.text-left {
+            (builder::builder(&condition))
+        }
     );
 
-    render_layout(content)
+    Ok(render_layout(content))
 }
 
 async fn perf_handler() -> String {
@@ -142,7 +159,7 @@ async fn condition_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<ConditionQuery>,
 ) -> Result<Json<ConditionResult>, (StatusCode, String)> {
-    let expression = match json5::from_str::<Condition>(query.exp.as_str()) {
+    let expression: Condition = match (&query.exp).try_into() {
         Ok(data) => data,
         Err(_) => {
             return Err((

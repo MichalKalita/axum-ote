@@ -1,7 +1,7 @@
 use chrono::{NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Condition {
     #[serde(rename = "and")]
     And(Vec<Condition>),
@@ -52,6 +52,14 @@ impl Eval for Condition {
             #[cfg(test)]
             Condition::Debug(state) => *state,
         }
+    }
+}
+
+impl TryFrom<&String> for Condition {
+    type Error = json5::Error;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        json5::from_str::<Self>(value)
     }
 }
 
@@ -221,7 +229,7 @@ mod condition_tests {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum Range {
     #[serde(rename = "today")]
     Today,
