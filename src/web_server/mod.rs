@@ -22,7 +22,7 @@ use html_render::render_layout;
 fn create_app(state: state::AppState) -> Router {
     Router::new()
         .route("/", get(fetch_data_handler))
-        .route("/builder", get(builder_handler))
+        .route("/builder", get(builder_handler).post(builder_handler))
         .route("/exp", get(condition_handler))
         .route("/perf", get(perf_handler))
         .with_state(Arc::new(state))

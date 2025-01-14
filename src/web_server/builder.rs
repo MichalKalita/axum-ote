@@ -2,32 +2,51 @@ use maud::{html, Markup};
 
 use super::conditions::Condition;
 
-trait CopyPush {
-    fn copy_push(&self, position: u8) -> Vec<u8>;
+#[derive(Clone)]
+struct Position(Vec<u8>);
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let position_str = self
+            .0
+            .iter()
+            .map(|p| format!("[{}]", p))
+            .collect::<Vec<String>>()
+            .join("");
+        write!(f, "{}", position_str)
+    }
 }
 
-impl CopyPush for Vec<u8> {
-    fn copy_push(&self, position: u8) -> Vec<u8> {
+impl Position {
+    fn new() -> Self {
+        Position(vec![])
+    }
+    fn extend(&self, position: u8) -> Position {
         let mut new_vec = self.clone();
-        new_vec.push(position);
+        new_vec.0.push(position);
 
         new_vec
     }
 }
 
 pub fn builder(condition: &Condition) -> Markup {
-    inside_builder(condition, vec![])
+    html! {
+        form #builder method="post" hx-post="" hx-target="body" {
+            (inside_builder(condition, Position::new()))
+        }
+    }
 }
 
-fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
+fn inside_builder(condition: &Condition, position: Position) -> Markup {
     match condition {
         Condition::And(vec) => {
             html! {
-                div {
-                    "And"
+                div .border-l .pl-2 {
+                    div .font-bold .text-xl { "And" }
+                    div { "All this conditions must match together" }
                     ol .list-decimal.list-inside {
                         @for (index, condition) in vec.iter().enumerate() {
-                            li .pt-2 { (inside_builder(condition, position.copy_push(index as u8))) }
+                            li .pt-2 { (inside_builder(condition, position.extend(index as u8))) }
                         }
                     }
                     (add_condition(position))
@@ -36,11 +55,11 @@ fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
         }
         Condition::Or(vec) => {
             html! {
-                div {
+                div .border-l .pl-2 {
                     "Or"
                     ol .list-decimal.list-inside {
                         @for (index, condition) in vec.iter().enumerate() {
-                            li .pt-2 { (inside_builder(condition, position.copy_push(index as u8))) }
+                            li .pt-2 { (inside_builder(condition, position.extend(index as u8))) }
                         }
                     }
                     (add_condition(position))
@@ -49,9 +68,9 @@ fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
         }
         Condition::Not(condition) => {
             html! {
-                div .inline-block {
+                div .inline-block .border-l .pl-2 {
                     "Not"
-                    (inside_builder(condition, position.copy_push(1)))
+                    (inside_builder(condition, position.extend(0)))
                 }
             }
         }
@@ -59,7 +78,7 @@ fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
             html! {
                 div .inline-block {
                     "Price lower than"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(value);
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(value) name={"exp" (position) "[price]"};
                 }
             }
         }
@@ -67,9 +86,9 @@ fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
             html! {
                 div .inline-block {
                     "Hours"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(from);
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(from) name={"exp" (position) "[hours][from]"};
                     "to"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(to);
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(to) name={"exp" (position) "[hours][to]"};
                 }
             }
         }
@@ -80,14 +99,18 @@ fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
     }
 }
 
-fn add_condition(position: Vec<u8>) -> Markup {
+fn add_condition(position: Position) -> Markup {
     html! {
         div .pt-2 {
-            "Add next condition"
-            button .font-bold.px-2.text-sky-400.underline { "Or" }
-            button .font-bold.px-2.text-sky-400.underline { "Price" }
-            button .font-bold.px-2.text-sky-400.underline { "Hours" }
-            button .font-bold.px-2.text-sky-400.underline { "Not" }
+            "+"
+
+            select .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" name={"exp" (position) "[extend]"} hx-post hx-trigger="change" {
+                option { "-- Add condition --" }
+                option value="or" { "Or" }
+                option value="price" { "Price" }
+                option value="hours" { "Hours" }
+                option value="not" { "Not" }
+            }
         }
     }
 }

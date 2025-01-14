@@ -8,6 +8,7 @@ pub fn render_layout(content: Markup) -> Markup {
             head {
                 title { "OTE CR Price Checker" }
                 script src="https://cdn.tailwindcss.com" {}
+                script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" {}
             }
             body .p-4.text-center."dark:bg-gray-900"."dark:text-gray-300" {
                 (content)
