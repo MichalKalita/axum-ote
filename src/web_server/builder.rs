@@ -15,7 +15,11 @@ impl CopyPush for Vec<u8> {
     }
 }
 
-pub fn builder(condition: &Condition, position: Vec<u8>) -> Markup {
+pub fn builder(condition: &Condition) -> Markup {
+    inside_builder(condition, vec![])
+}
+
+fn inside_builder(condition: &Condition, position: Vec<u8>) -> Markup {
     match condition {
         Condition::And(vec) => {
             html! {
@@ -23,7 +27,7 @@ pub fn builder(condition: &Condition, position: Vec<u8>) -> Markup {
                     "And"
                     ol .list-decimal.list-inside {
                         @for (index, condition) in vec.iter().enumerate() {
-                            li .pt-2 { (builder(condition, position.copy_push(index as u8))) }
+                            li .pt-2 { (inside_builder(condition, position.copy_push(index as u8))) }
                         }
                     }
                     (add_condition(position))
@@ -36,7 +40,7 @@ pub fn builder(condition: &Condition, position: Vec<u8>) -> Markup {
                     "Or"
                     ol .list-decimal.list-inside {
                         @for (index, condition) in vec.iter().enumerate() {
-                            li .pt-2 { (builder(condition, position.copy_push(index as u8))) }
+                            li .pt-2 { (inside_builder(condition, position.copy_push(index as u8))) }
                         }
                     }
                     (add_condition(position))
@@ -47,7 +51,7 @@ pub fn builder(condition: &Condition, position: Vec<u8>) -> Markup {
             html! {
                 div .inline-block {
                     "Not"
-                    (builder(condition, position.copy_push(1)))
+                    (inside_builder(condition, position.copy_push(1)))
                 }
             }
         }
