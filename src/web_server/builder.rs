@@ -10,16 +10,16 @@ impl std::fmt::Display for Position {
         let position_str = self
             .0
             .iter()
-            .map(|p| format!("[{}]", p))
+            .map(|p| format!("{}", p))
             .collect::<Vec<String>>()
-            .join("");
+            .join(".");
         write!(f, "{}", position_str)
     }
 }
 
 impl Position {
     fn new() -> Self {
-        Position(vec![])
+        Position(vec![0])
     }
     fn extend(&self, position: u8) -> Position {
         let mut new_vec = self.clone();
@@ -31,9 +31,9 @@ impl Position {
 
 pub fn builder(condition: &Condition) -> Markup {
     html! {
-        form #builder method="post" hx-post="" hx-target="body" {
+        // form #builder method="post" hx-post="" hx-target="body" {
             (inside_builder(condition, Position::new()))
-        }
+        // }
     }
 }
 
@@ -78,7 +78,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
             html! {
                 div .inline-block {
                     "Price lower than"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(value) name={"exp" (position) "[price]"};
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(value) name={"exp-" (position) "-price"};
                 }
             }
         }
@@ -86,9 +86,9 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
             html! {
                 div .inline-block {
                     "Hours"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(from) name={"exp" (position) "[hours][from]"};
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(from) name={"exp-" (position) "-hours-from"};
                     "to"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(to) name={"exp" (position) "[hours][to]"};
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(to) name={"exp-" (position) "-hours-to"};
                 }
             }
         }
@@ -101,10 +101,11 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
 
 fn add_condition(position: Position) -> Markup {
     html! {
-        div .pt-2 {
+        form hx-post hx-trigger="change" .pt-2 {
             "+"
 
-            select .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" name={"exp" (position) "[extend]"} hx-post hx-trigger="change" {
+            input type="hidden" name="id" value=(position);
+            select .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" name={"extend"} {
                 option { "-- Add condition --" }
                 option value="or" { "Or" }
                 option value="price" { "Price" }

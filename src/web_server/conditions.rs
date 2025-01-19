@@ -59,7 +59,8 @@ impl TryFrom<&String> for Condition {
     type Error = json5::Error;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
-        json5::from_str::<Self>(value)
+        let items = json5::from_str::<Vec<Condition>>(value)?;
+        Ok(Condition::And(items))
     }
 }
 

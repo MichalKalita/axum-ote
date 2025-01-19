@@ -7,7 +7,7 @@ use axum::{
     extract::{Query, State},
     response::{IntoResponse, Json},
     routing::get,
-    Router,
+    Form, Router,
 };
 use chrono::{Local, NaiveDate, Timelike};
 use conditions::{Condition, Eval};
@@ -22,7 +22,10 @@ use html_render::render_layout;
 fn create_app(state: state::AppState) -> Router {
     Router::new()
         .route("/", get(fetch_data_handler))
-        .route("/builder", get(builder_handler).post(builder_handler))
+        .route(
+            "/builder",
+            get(builder_handler).post(bunlder_update_handler),
+        )
         .route("/exp", get(condition_handler))
         .route("/perf", get(perf_handler))
         .with_state(Arc::new(state))
@@ -89,6 +92,35 @@ struct OptimalizerQuery {
     exp: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct UpdateForm {
+    #[serde(deserialize_with = "deserialize_id")]
+    id: Vec<u8>,
+    price: Option<f32>,
+    extend: Option<Extend>,
+}
+
+fn deserialize_id<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    s.split('.')
+        .map(|part| part.parse::<u8>().map_err(serde::de::Error::custom))
+        .collect()
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+enum Extend {
+    And,
+    Or,
+    Not,
+    Price,
+    Hours,
+    Percentile,
+}
+
 async fn builder_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<OptimalizerQuery>,
@@ -126,6 +158,10 @@ async fn builder_handler(
     );
 
     Ok(render_layout(content))
+}
+
+async fn bunlder_update_handler(form_data: Form<UpdateForm>) -> impl IntoResponse {
+    format!("{:?}", form_data)
 }
 
 async fn perf_handler() -> String {
