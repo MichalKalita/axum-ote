@@ -10,7 +10,7 @@ use axum::{
     Form, Router,
 };
 use chrono::{Local, NaiveDate, Timelike};
-use conditions::{Condition, Eval};
+use conditions::{ChangeRequest, Condition, Eval};
 use maud::html;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -92,35 +92,6 @@ struct OptimalizerQuery {
     exp: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
-struct UpdateForm {
-    #[serde(deserialize_with = "deserialize_id")]
-    id: Vec<u8>,
-    price: Option<f32>,
-    extend: Option<Extend>,
-}
-
-fn deserialize_id<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s: String = Deserialize::deserialize(deserializer)?;
-    s.split('.')
-        .map(|part| part.parse::<u8>().map_err(serde::de::Error::custom))
-        .collect()
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "lowercase")]
-enum Extend {
-    And,
-    Or,
-    Not,
-    Price,
-    Hours,
-    Percentile,
-}
-
 async fn builder_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<OptimalizerQuery>,
@@ -162,7 +133,7 @@ async fn builder_handler(
 
 async fn builder_update_handler(
     query: Query<OptimalizerQuery>,
-    form_data: Form<UpdateForm>,
+    form_data: Form<ChangeRequest>,
 ) -> impl IntoResponse {
     let response = format!("{:?}", form_data);
 
@@ -173,7 +144,7 @@ async fn builder_update_handler(
         None => Condition::And(vec![]),
     };
 
-    // condition.perform_update(form_data);
+    condition.apply_changes(&form_data);
 
     let exp: &String = &condition.try_into().unwrap();
     let url = format!("/builder?exp={}", exp);

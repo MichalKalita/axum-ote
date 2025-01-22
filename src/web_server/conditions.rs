@@ -1,7 +1,7 @@
 use chrono::{NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Condition {
     #[serde(rename = "and")]
     And(Vec<Condition>),
@@ -247,7 +247,7 @@ mod condition_tests {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum Range {
     #[serde(rename = "today")]
     Today,
@@ -470,5 +470,171 @@ mod prices_context_test {
             prices: vec![1.0],
         }
         .percentile();
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ChangeRequest {
+    #[serde(deserialize_with = "deserialize_id")]
+    id: Vec<u8>,
+    #[serde(flatten)]
+    payload: ChangeRequestPayload,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+enum ChangeRequestPayload {
+    Extend { extend: ChangeRequestExtenstion },
+    Price { price: f32 },
+    Hours { from: u32, to: u32 },
+    // Percentile,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+enum ChangeRequestExtenstion {
+    And,
+    Or,
+    Not,
+    Price,
+    Hours,
+    Percentile,
+}
+
+fn deserialize_id<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    s.split('.')
+        .map(|part| part.parse::<u8>().map_err(serde::de::Error::custom))
+        .collect()
+}
+
+impl Condition {
+    pub fn apply_changes(&mut self, changes: &ChangeRequest) -> Result<(), String> {
+        // changes have id [0,1,2] => 1. element in And, 2. element inside, and 3. element inside previous
+        // change payload will be applied to the last element
+        // Err if fails
+
+        let mut current_condition: &mut Condition = self;
+        for &index in &changes.id {
+            match current_condition {
+                Condition::And(ref mut items) | Condition::Or(ref mut items) => {
+                    if let Some(next_condition) = items.get_mut(index as usize) {
+                        current_condition = next_condition;
+                    } else {
+                        return Err("Index out of bounds".to_string());
+                    }
+                }
+                _ => return Err("Unsupported condition type for traversal".to_string()),
+            }
+        }
+
+        match (current_condition, &changes.payload) {
+            (Condition::And(vec), ChangeRequestPayload::Extend { extend })
+            | (Condition::Or(vec), ChangeRequestPayload::Extend { extend }) => {
+                vec.push(match extend {
+                    ChangeRequestExtenstion::And => Condition::And(vec![]),
+                    ChangeRequestExtenstion::Or => Condition::Or(vec![]),
+                    ChangeRequestExtenstion::Not => {
+                        Condition::Not(Box::new(Condition::And(vec![])))
+                    }
+                    ChangeRequestExtenstion::Price => Condition::PriceLowerThan(0.0),
+                    ChangeRequestExtenstion::Hours => Condition::Hours(0, 0),
+                    ChangeRequestExtenstion::Percentile => Condition::PercentileInRange {
+                        value: 0.0,
+                        range: Range::Today,
+                    },
+                });
+                Ok(())
+            }
+            (Condition::Not(condition), ChangeRequestPayload::Extend { extend }) => todo!(),
+            (
+                Condition::PriceLowerThan(ref mut price_ref),
+                ChangeRequestPayload::Price { price },
+            ) => {
+                *price_ref = *price;
+                Ok(())
+            }
+            (
+                Condition::Hours(ref mut from_ref, ref mut to_ref),
+                ChangeRequestPayload::Hours { from, to },
+            ) => {
+                *from_ref = *from;
+                *to_ref = *to;
+                Ok(())
+            }
+            _ => Err("Unsupported combination of condition and payload".to_string()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod change_request_tests {
+    use super::*;
+
+    #[test]
+    fn test_extending() {
+        let mut condition = Condition::And(vec![
+            Condition::PriceLowerThan(100.0),
+            Condition::Hours(0, 2),
+            Condition::Or(vec![]),
+        ]);
+        let request = ChangeRequest {
+            id: vec![2],
+            payload: ChangeRequestPayload::Extend {
+                extend: ChangeRequestExtenstion::Price,
+            },
+        };
+
+        condition.apply_changes(&request).unwrap();
+
+        assert_eq!(
+            condition,
+            Condition::And(vec![
+                Condition::PriceLowerThan(100.0),
+                Condition::Hours(0, 2),
+                Condition::Or(vec![Condition::PriceLowerThan(0.0),]),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_bad_id() {
+        let mut condition = Condition::And(vec![]);
+        let request = ChangeRequest {
+            id: vec![3],
+            payload: ChangeRequestPayload::Extend {
+                extend: ChangeRequestExtenstion::Price,
+            },
+        };
+
+        let result = condition.apply_changes(&request);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_change_price() {
+        let mut condition = Condition::And(vec![
+            Condition::PriceLowerThan(100.0),
+            Condition::Hours(0, 2),
+            Condition::Or(vec![]),
+        ]);
+        let request = ChangeRequest {
+            id: vec![0],
+            payload: ChangeRequestPayload::Price { price: 50.0 },
+        };
+
+        condition.apply_changes(&request).unwrap();
+
+        assert_eq!(
+            condition,
+            Condition::And(vec![
+                Condition::PriceLowerThan(50.0),
+                Condition::Hours(0, 2),
+                Condition::Or(vec![]),
+            ])
+        );
     }
 }
