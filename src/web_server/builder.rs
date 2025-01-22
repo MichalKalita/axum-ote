@@ -92,7 +92,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
                 }
             }
         }
-        Condition::PercentileInRange { value, range } => todo!(),
+        Condition::PercentileInRange { value: _, range: _ } => todo!(),
 
         #[cfg(test)]
         Condition::Debug(_) => todo!(),

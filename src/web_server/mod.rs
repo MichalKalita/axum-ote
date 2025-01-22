@@ -24,7 +24,7 @@ fn create_app(state: state::AppState) -> Router {
         .route("/", get(fetch_data_handler))
         .route(
             "/builder",
-            get(builder_handler).post(bunlder_update_handler),
+            get(builder_handler).post(builder_update_handler),
         )
         .route("/exp", get(condition_handler))
         .route("/perf", get(perf_handler))
@@ -160,8 +160,25 @@ async fn builder_handler(
     Ok(render_layout(content))
 }
 
-async fn bunlder_update_handler(form_data: Form<UpdateForm>) -> impl IntoResponse {
-    format!("{:?}", form_data)
+async fn builder_update_handler(
+    query: Query<OptimalizerQuery>,
+    form_data: Form<UpdateForm>,
+) -> impl IntoResponse {
+    let response = format!("{:?}", form_data);
+
+    let condition = query.exp.as_ref().map(|exp| Condition::try_from(exp));
+    let mut condition = match condition {
+        Some(Ok(data)) => data,
+        Some(Err(err)) => return Err(format!("Error parsing expression: {}", err)),
+        None => Condition::And(vec![]),
+    };
+
+    // condition.perform_update(form_data);
+
+    let exp: &String = &condition.try_into().unwrap();
+    let url = format!("/builder?exp={}", exp);
+
+    Ok(([("Location", url.clone()), ("HX-Push-Url", url)], response))
 }
 
 async fn perf_handler() -> String {

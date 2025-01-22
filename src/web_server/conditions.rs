@@ -64,6 +64,23 @@ impl TryFrom<&String> for Condition {
     }
 }
 
+impl TryFrom<Condition> for String {
+    type Error = json5::Error;
+
+    fn try_from(value: Condition) -> Result<Self, Self::Error> {
+        let items = match value {
+            Condition::And(items) => items,
+            _ => {
+                return Err(json5::Error::Message {
+                    msg: "Other than And is not supported".to_string(),
+                    location: None,
+                })
+            }
+        };
+        json5::to_string(&items)
+    }
+}
+
 #[cfg(test)]
 mod condition_tests {
     use chrono::NaiveDateTime;
