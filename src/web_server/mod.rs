@@ -9,6 +9,7 @@ use axum::{
     routing::get,
     Form, Router,
 };
+use builder::additional_condition;
 use chrono::{Local, NaiveDate, Timelike};
 use conditions::{ChangeRequest, Condition, Eval};
 use maud::html;
@@ -135,8 +136,6 @@ async fn builder_update_handler(
     query: Query<OptimalizerQuery>,
     form_data: Form<ChangeRequest>,
 ) -> impl IntoResponse {
-    let response = format!("{:?}", form_data);
-
     let condition = query.exp.as_ref().map(|exp| Condition::try_from(exp));
     let mut condition = match condition {
         Some(Ok(data)) => data,
@@ -144,10 +143,12 @@ async fn builder_update_handler(
         None => Condition::And(vec![]),
     };
 
-    condition.apply_changes(&form_data);
+    let (diff, new_position) = condition.apply_changes(&form_data)?;
 
     let exp: &String = &condition.try_into().unwrap();
     let url = format!("/builder?exp={}", exp);
+
+    let response = additional_condition(&diff, new_position);
 
     Ok(([("Location", url.clone()), ("HX-Push-Url", url)], response))
 }
