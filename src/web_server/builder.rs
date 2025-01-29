@@ -101,7 +101,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
                 div #{(position.element_id())} .border-l .pl-2 {
                     div .font-bold .text-xl { "And" }
                     div { "All this conditions must match together" }
-                    ol .list-decimal.list-inside {
+                    ol .list-decimal.pl-6 {
                         @for (index, condition) in vec.iter().enumerate() {
                             (list_item(inside_builder(condition, position.extend(index as u8))))
                         }
@@ -114,7 +114,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
             html! {
                 div #{(position.element_id())} .border-l .pl-2 {
                     "Or"
-                    ol .list-decimal.list-inside {
+                    ol .list-decimal.pl-6 {
                         @for (index, condition) in vec.iter().enumerate() {
                             (list_item(inside_builder(condition, position.extend(index as u8))))
                         }
@@ -133,9 +133,12 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
         }
         Condition::PriceLowerThan(value) => {
             html! {
-                div .inline-block {
+                form.m-0 hx-post {
+                    input type="hidden" name="id" value=(position);
+
                     "Price lower than"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(value) name={"exp-" (position) "-price"};
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(value) name="price";
+                    input type="submit" value="Save";
                 }
             }
         }
@@ -143,9 +146,9 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
             html! {
                 div .inline-block {
                     "Hours"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(from) name={"exp-" (position) "-hours-from"};
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(from) name="hours-from";
                     "to"
-                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(to) name={"exp-" (position) "-hours-to"};
+                    input .bg-gray-800 .border .border-gray-700 .mx-1 ."p-0.5" .text-right .w-20 type="number" value=(to) name="hours-to";
                 }
             }
         }
@@ -158,7 +161,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
 
 fn list_item(content: Markup) -> Markup {
     html! {
-        li .pt-2 { (content) }
+        li .pt-2.pl-2 { (content) }
     }
 }
 
@@ -168,7 +171,7 @@ pub fn additional_condition(condition: &Condition, position: Position) -> Markup
 
 fn add_condition(position: Position) -> Markup {
     html! {
-        form hx-post hx-trigger="change" hx-target={"#"(position.element_id()) " ol"} hx-swap="beforeend" .pt-2 {
+        form hx-post hx-trigger="change" hx-target={"#"(position.element_id()) " ol"} hx-swap="beforeend" "hx-on::after-request"="this.reset()" .pt-2 {
             "+"
 
             input type="hidden" name="id" value=(position);
