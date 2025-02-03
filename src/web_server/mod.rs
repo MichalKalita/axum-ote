@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use std::sync::Arc;
 
-use html_render::render_layout;
+use html_render::{render_layout, RenderHtml};
 
 fn create_app(state: state::AppState) -> Router {
     Router::new()
@@ -113,19 +113,14 @@ async fn builder_handler(
     let content = html!(
         h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
 
-        h2 .text-2xl.font-semibold.mb-4 { "Actual expression" }
-        pre {
-            (format!("{:?}", condition))
-        }
+        div .text-left {
+            h2 .text-2xl.font-semibold.mb-4 { "Condition" }
+            (&condition.render_html())
 
-        h2 .text-2xl.font-semibold.mb-4 { "Result" }
-        pre {
-            (format!("{:?}", condition.evaluate(&exp_context)))
-        }
-
-        h2 .text-2xl.font-semibold.mb-4 { "Builder" }
-        div .builder.text-left {
-            (builder::builder(&condition))
+            h2 .text-2xl.font-semibold.mb-4 { "Evaluation" }
+            pre {
+                (format!("{:?}", condition.evaluate(&exp_context)))
+            }
         }
     );
 

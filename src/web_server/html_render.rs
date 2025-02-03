@@ -2,6 +2,8 @@ use maud::{html, Markup};
 
 use crate::web_server::state::{Distribution, PriceStats};
 
+use super::conditions::Condition;
+
 pub fn render_layout(content: Markup) -> Markup {
     html! {
         html {
@@ -9,6 +11,7 @@ pub fn render_layout(content: Markup) -> Markup {
                 title { "OTE CR Price Checker" }
                 script src="https://cdn.tailwindcss.com" {}
                 script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" {}
+                script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" {}
             }
             body .p-4.text-center."dark:bg-gray-900"."dark:text-gray-300" {
                 (content)
@@ -97,6 +100,57 @@ impl crate::web_server::state::DayPrices {
                     }
                 }
             }
+        }
+    }
+}
+
+pub trait RenderHtml {
+    fn render_html(&self) -> Markup;
+}
+
+impl RenderHtml for Condition {
+    fn render_html(&self) -> Markup {
+        match self {
+            Condition::And(conditions) => html! {
+                div .ml-4 {
+                    "AND"
+                    ul {
+                        @for condition in conditions {
+                            li { (condition.render_html()) }
+                        }
+                    }
+                }
+            },
+            Condition::Or(conditions) => html! {
+                div .ml-4 {
+                    "OR"
+                    ul {
+                        @for condition in conditions {
+                            li { (condition.render_html()) }
+                        }
+                    }
+                }
+            },
+            Condition::Not(condition) => html! {
+                div .ml-4 {
+                    "NOT"
+                    (condition.render_html())
+                }
+            },
+            Condition::Price(price) => html! {
+                div .ml-4 {
+                    "Price: " (price)
+                }
+            },
+            Condition::Hours(from, to) => html! {
+                div .ml-4 {
+                    "Hours: " (from) " - " (to)
+                }
+            },
+            Condition::Percentile { value: _, range: _ } => todo!(),
+
+            #[cfg(test)]
+            Condition::Debug(_) => todo!(),
         }
     }
 }

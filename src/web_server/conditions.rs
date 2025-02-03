@@ -13,11 +13,11 @@ pub enum Condition {
     Not(Box<Condition>),
 
     #[serde(rename = "price")]
-    PriceLowerThan(f32),
+    Price(f32),
     #[serde(rename = "hours")]
     Hours(u32, u32),
     #[serde(rename = "percentile")]
-    PercentileInRange { value: f32, range: Range },
+    Percentile { value: f32, range: Range },
 
     #[cfg(test)]
     Debug(bool),
@@ -35,13 +35,13 @@ impl Eval for Condition {
             Condition::And(_) | Condition::Or(_) => false,
 
             Condition::Not(item) => !item.evaluate(ctx),
-            Condition::PriceLowerThan(price) => ctx.prices.prices[ctx.prices.now_index] <= *price,
+            Condition::Price(price) => ctx.prices.prices[ctx.prices.now_index] <= *price,
             Condition::Hours(min, max) => {
                 let hour = ctx.now.hour();
 
                 *min <= hour && hour <= *max
             }
-            Condition::PercentileInRange {
+            Condition::Percentile {
                 value: target_percentile,
                 range,
             } => {
@@ -103,10 +103,10 @@ mod condition_tests {
     fn test_price() {
         let ctx = setup();
 
-        let condition = Condition::PriceLowerThan(100.0);
+        let condition = Condition::Price(100.0);
         assert!(condition.evaluate(&ctx));
 
-        let condition = Condition::PriceLowerThan(0.0);
+        let condition = Condition::Price(0.0);
         assert!(!condition.evaluate(&ctx));
     }
 
@@ -123,21 +123,21 @@ mod condition_tests {
     fn test_percentile() {
         let ctx = setup();
 
-        let result = Condition::PercentileInRange {
+        let result = Condition::Percentile {
             value: 0.05,
             range: Range::Today, // calculated percentil is 0.04347826
         }
         .evaluate(&ctx);
         assert_eq!(result, true);
 
-        let result = Condition::PercentileInRange {
+        let result = Condition::Percentile {
             value: 0.04,
             range: Range::Today, // calculated percentil is 0.04347826
         }
         .evaluate(&ctx);
         assert_eq!(result, false);
 
-        let result = Condition::PercentileInRange {
+        let result = Condition::Percentile {
             value: 0.0,
             range: Range::Future,
         }
@@ -147,14 +147,14 @@ mod condition_tests {
             "this is cheapiest one price in now and future"
         );
 
-        let result = Condition::PercentileInRange {
+        let result = Condition::Percentile {
             value: 0.51,
             range: Range::PlusMinusHours(1),
         }
         .evaluate(&ctx);
         assert_eq!(result, true);
 
-        let result = Condition::PercentileInRange {
+        let result = Condition::Percentile {
             value: 0.49,
             range: Range::PlusMinusHours(1),
         }
@@ -551,9 +551,9 @@ impl Condition {
                     ChangeRequestExtenstion::Not => {
                         Condition::Not(Box::new(Condition::And(vec![])))
                     }
-                    ChangeRequestExtenstion::Price => Condition::PriceLowerThan(0.0),
+                    ChangeRequestExtenstion::Price => Condition::Price(0.0),
                     ChangeRequestExtenstion::Hours => Condition::Hours(0, 0),
-                    ChangeRequestExtenstion::Percentile => Condition::PercentileInRange {
+                    ChangeRequestExtenstion::Percentile => Condition::Percentile {
                         value: 0.0,
                         range: Range::Today,
                     },
@@ -563,13 +563,10 @@ impl Condition {
 
                 Ok((diff, position))
             }
-            (Condition::Not(condition), ChangeRequestPayload::Extend { extend }) => todo!(),
-            (
-                Condition::PriceLowerThan(ref mut price_ref),
-                ChangeRequestPayload::Price { price },
-            ) => {
+            (Condition::Not(_condition), ChangeRequestPayload::Extend { extend: _ }) => todo!(),
+            (Condition::Price(ref mut price_ref), ChangeRequestPayload::Price { price }) => {
                 *price_ref = *price;
-                Ok((Condition::PriceLowerThan(*price_ref), position))
+                Ok((Condition::Price(*price_ref), position))
             }
             (
                 Condition::Hours(ref mut from_ref, ref mut to_ref),
@@ -590,10 +587,7 @@ mod change_request_tests {
 
     #[test]
     fn test_simple_extending() {
-        let mut condition = Condition::And(vec![
-            Condition::PriceLowerThan(100.0),
-            Condition::Hours(0, 2),
-        ]);
+        let mut condition = Condition::And(vec![Condition::Price(100.0), Condition::Hours(0, 2)]);
         let request = ChangeRequest {
             id: vec![],
             payload: ChangeRequestPayload::Extend {
@@ -607,7 +601,7 @@ mod change_request_tests {
         assert_eq!(
             condition,
             Condition::And(vec![
-                Condition::PriceLowerThan(100.0),
+                Condition::Price(100.0),
                 Condition::Hours(0, 2),
                 Condition::Or(vec![]),
             ])
@@ -617,7 +611,7 @@ mod change_request_tests {
     #[test]
     fn test_advanced_extending() {
         let mut condition = Condition::And(vec![
-            Condition::PriceLowerThan(100.0),
+            Condition::Price(100.0),
             Condition::Hours(0, 2),
             Condition::Or(vec![]),
         ]);
@@ -629,17 +623,14 @@ mod change_request_tests {
         };
 
         let result = condition.apply_changes(&request).unwrap();
-        assert_eq!(
-            result,
-            (Condition::PriceLowerThan(0.0), Position::from(&vec![2, 0]))
-        );
+        assert_eq!(result, (Condition::Price(0.0), Position::from(&vec![2, 0])));
 
         assert_eq!(
             condition,
             Condition::And(vec![
-                Condition::PriceLowerThan(100.0),
+                Condition::Price(100.0),
                 Condition::Hours(0, 2),
-                Condition::Or(vec![Condition::PriceLowerThan(0.0),]),
+                Condition::Or(vec![Condition::Price(0.0),]),
             ])
         );
     }
@@ -661,7 +652,7 @@ mod change_request_tests {
     #[test]
     fn test_change_price() {
         let mut condition = Condition::And(vec![
-            Condition::PriceLowerThan(100.0),
+            Condition::Price(100.0),
             Condition::Hours(0, 2),
             Condition::Or(vec![]),
         ]);
@@ -675,7 +666,7 @@ mod change_request_tests {
         assert_eq!(
             condition,
             Condition::And(vec![
-                Condition::PriceLowerThan(50.0),
+                Condition::Price(50.0),
                 Condition::Hours(0, 2),
                 Condition::Or(vec![]),
             ])

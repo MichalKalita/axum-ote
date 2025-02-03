@@ -10,7 +10,7 @@ impl std::fmt::Display for Position {
         let position_str = self
             .0
             .iter()
-            .map(|p| format!("{}", p))
+            .map(|p| p.to_string())
             .collect::<Vec<String>>()
             .join(".");
         write!(f, "{}", position_str)
@@ -131,7 +131,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
                 }
             }
         }
-        Condition::PriceLowerThan(value) => {
+        Condition::Price(value) => {
             html! {
                 form.m-0 hx-post {
                     input type="hidden" name="id" value=(position);
@@ -152,7 +152,7 @@ fn inside_builder(condition: &Condition, position: Position) -> Markup {
                 }
             }
         }
-        Condition::PercentileInRange { value: _, range: _ } => todo!(),
+        Condition::Percentile { value: _, range: _ } => todo!(),
 
         #[cfg(test)]
         Condition::Debug(_) => todo!(),
