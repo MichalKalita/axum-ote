@@ -5,7 +5,7 @@ mod state;
 
 use axum::{
     extract::{Query, State},
-    response::{IntoResponse, Json},
+    response::IntoResponse,
     routing::get,
     Form, Router,
 };
@@ -14,7 +14,7 @@ use chrono::{Local, NaiveDate, Timelike};
 use conditions::{ChangeRequest, Condition, Eval};
 use maud::html;
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use std::sync::Arc;
 
@@ -27,8 +27,6 @@ fn create_app(state: state::AppState) -> Router {
             "/builder",
             get(builder_handler).post(builder_update_handler),
         )
-        .route("/exp", get(condition_handler))
-        .route("/perf", get(perf_handler))
         .with_state(Arc::new(state))
 }
 
@@ -146,64 +144,4 @@ async fn builder_update_handler(
     let response = additional_condition(&diff, new_position);
 
     Ok(([("Location", url.clone()), ("HX-Push-Url", url)], response))
-}
-
-async fn perf_handler() -> String {
-    // Make some CPU-bound work
-    let mut sum: i64 = 0;
-    for i in 0..1_000_000_000 {
-        sum += i;
-        if sum == 2 {
-            sum = 3;
-        }
-        if sum == 10 {
-            sum = 11;
-        }
-    }
-    format!("Sum: {}", sum)
-}
-
-#[derive(Deserialize)]
-struct ConditionQuery {
-    exp: String,
-}
-
-#[derive(Serialize)]
-struct ConditionResult {
-    result: bool,
-    input: Condition,
-    context: conditions::EvaluateContext,
-}
-
-async fn condition_handler(
-    State(state): State<Arc<state::AppState>>,
-    query: Query<ConditionQuery>,
-) -> Result<Json<ConditionResult>, (StatusCode, String)> {
-    let expression: Condition = match (&query.exp).try_into() {
-        Ok(data) => data,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "Expression is not valid".to_string(),
-            ))
-        }
-    };
-
-    let exp_context = match state.expression_context().await {
-        Some(context) => context,
-        None => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error creating expression context".to_string(),
-            ))
-        }
-    };
-
-    let result = expression.evaluate(&exp_context);
-
-    Ok(Json(ConditionResult {
-        result,
-        input: expression,
-        context: exp_context,
-    }))
 }
