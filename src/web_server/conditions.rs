@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, Timelike};
+use chrono::{NaiveDateTime, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 
 use super::builder::Position;
@@ -25,6 +25,7 @@ pub enum Condition {
 
 pub trait Eval {
     fn evaluate(&self, ctx: &EvaluateContext) -> bool;
+    fn evaluate_all(&self, ctx: &EvaluateContext) -> Vec<bool>;
 }
 
 impl Eval for Condition {
@@ -54,6 +55,32 @@ impl Eval for Condition {
             #[cfg(test)]
             Condition::Debug(state) => *state,
         }
+    }
+
+    fn evaluate_all(&self, ctx: &EvaluateContext) -> Vec<bool> {
+        let start_time = ctx
+            .now
+            .checked_sub_signed(TimeDelta::hours(ctx.prices.now_index as i64))
+            .expect("Time overflow");
+
+        ctx.prices
+            .prices
+            .iter()
+            .enumerate()
+            .map(|(index, _price)| {
+                let updated_ctx = EvaluateContext {
+                    now: start_time
+                        .checked_add_signed(TimeDelta::hours(index as i64))
+                        .expect("Time overflow"),
+                    prices: PricesContext {
+                        prices: ctx.prices.prices.clone(),
+                        now_index: index,
+                    },
+                };
+
+                self.evaluate(&updated_ctx)
+            })
+            .collect::<Vec<bool>>()
     }
 }
 
@@ -95,7 +122,7 @@ mod condition_tests {
         EvaluateContext::new(
             NaiveDateTime::parse_from_str("2020-01-01 02:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
             (0..24).map(|i| i as f32).collect(),
-            1, // 2. hour
+            2, // 2:00 - 2:59
         )
     }
 
@@ -105,9 +132,17 @@ mod condition_tests {
 
         let condition = Condition::Price(100.0);
         assert!(condition.evaluate(&ctx));
+        assert_eq!(condition.evaluate_all(&ctx), [true; 24]);
 
         let condition = Condition::Price(0.0);
         assert!(!condition.evaluate(&ctx));
+        assert_eq!(
+            condition.evaluate_all(&ctx),
+            [
+                true, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, false, false
+            ]
+        );
     }
 
     #[test]
@@ -117,6 +152,14 @@ mod condition_tests {
         assert!(Condition::Hours(0, 2).evaluate(&ctx));
         assert!(!Condition::Hours(3, 4).evaluate(&ctx));
         assert!(Condition::Hours(1, 3).evaluate(&ctx));
+
+        assert_eq!(
+            Condition::Hours(1, 3).evaluate_all(&ctx),
+            [
+                false, true, true, true, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, false, false
+            ]
+        );
     }
 
     #[test]
@@ -124,15 +167,15 @@ mod condition_tests {
         let ctx = setup();
 
         let result = Condition::Percentile {
-            value: 0.05,
-            range: Range::Today, // calculated percentil is 0.04347826
+            value: 0.09,
+            range: Range::Today, // calculated percentil is 0.08695652
         }
         .evaluate(&ctx);
         assert_eq!(result, true);
 
         let result = Condition::Percentile {
-            value: 0.04,
-            range: Range::Today, // calculated percentil is 0.04347826
+            value: 0.08,
+            range: Range::Today, // calculated percentil is 0.08695652
         }
         .evaluate(&ctx);
         assert_eq!(result, false);
@@ -260,9 +303,9 @@ pub enum Range {
 }
 
 #[derive(Serialize, Debug)]
-pub(crate) struct EvaluateContext {
-    now: NaiveDateTime,
-    prices: PricesContext,
+pub struct EvaluateContext {
+    pub now: NaiveDateTime,
+    pub prices: PricesContext,
 }
 
 impl EvaluateContext {
@@ -371,9 +414,9 @@ mod evaluate_context_tests {
 }
 
 #[derive(Serialize, Debug)]
-struct PricesContext {
-    prices: Vec<f32>,
-    now_index: usize,
+pub struct PricesContext {
+    pub prices: Vec<f32>,
+    pub now_index: usize,
 }
 
 impl PricesContext {

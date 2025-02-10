@@ -76,7 +76,7 @@ async fn fetch_data_handler(
                     " | "
                     a href={"/?date=" (input_date + chrono::Duration::days(1))} { "Next day" }
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, price)| { if *index == active_hour { "var(--color-green-500)" } else { "var(--color-blue-500)" } })) }
+                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == active_hour { "var(--color-green-500)" } else { "var(--color-blue-500)" } })) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
                 div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }
@@ -123,7 +123,7 @@ async fn get_builder_handler(
             }
 
             h2 .text-2xl.font-semibold.mb-4 { "Evaluate in Chart" }
-            // div .mb-4.flex.justify-center { (condition.evaluate_in_chart(&exp_context)) }
+            div .mb-4.flex.justify-center { (condition.evaluate_all_in_chart(&exp_context)) }
         }
     );
 

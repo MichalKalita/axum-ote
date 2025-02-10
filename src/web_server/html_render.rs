@@ -2,7 +2,7 @@ use maud::{html, Markup};
 
 use crate::web_server::state::Distribution;
 
-use super::conditions::Condition;
+use super::conditions::{Condition, Eval, EvaluateContext};
 
 pub fn render_layout(content: Markup) -> Markup {
     html! {
@@ -85,6 +85,26 @@ impl ChartSettings {
                 }
             }
         }
+    }
+}
+
+impl Condition {
+    pub fn evaluate_all_in_chart(&self, ctx: &EvaluateContext) -> Markup {
+        let results = self.evaluate_all(ctx);
+
+        let labels = &results
+            .iter()
+            .map(|result| if *result { "T" } else { "F" })
+            .collect::<Vec<&str>>();
+
+        let chart = ChartSettings::default();
+        chart.render(&ctx.prices.prices, Some(&labels), |(index, _price)| {
+            if results[*index] {
+                "var(--color-green-500)"
+            } else {
+                "var(--color-red-500)"
+            }
+        })
     }
 }
 
