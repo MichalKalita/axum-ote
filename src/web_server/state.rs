@@ -58,10 +58,10 @@ pub struct Distribution {
 }
 
 impl Distribution {
-    pub fn by_hours(&self) -> [bool; 24] {
-        let mut distribution = [false; 24];
+    pub fn by_hours(&self) -> [&str; 24] {
+        let mut distribution = ["N"; 24];
         for hour in self.high_hours.iter() {
-            distribution[*hour as usize] = true;
+            distribution[*hour as usize] = "V";
         }
         distribution
     }

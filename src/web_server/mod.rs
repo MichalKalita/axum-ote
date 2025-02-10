@@ -18,14 +18,14 @@ use serde::Deserialize;
 
 use std::sync::Arc;
 
-use html_render::{render_layout, RenderHtml};
+use html_render::{render_layout, ChartSettings, RenderHtml};
 
 fn create_app(state: state::AppState) -> Router {
     Router::new()
         .route("/", get(fetch_data_handler))
         .route(
             "/builder",
-            get(builder_handler).post(builder_update_handler),
+            get(get_builder_handler).post(post_builder_handler),
         )
         .with_state(Arc::new(state))
 }
@@ -63,6 +63,8 @@ async fn fetch_data_handler(
         usize::MAX
     };
 
+    let chart = ChartSettings::default();
+
     let (status, content) = match state.get_prices(&input_date).await {
         Some(prices) => (
             StatusCode::OK,
@@ -74,7 +76,7 @@ async fn fetch_data_handler(
                     " | "
                     a href={"/?date=" (input_date + chrono::Duration::days(1))} { "Next day" }
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (prices.render_graph(&state.distribution, active_hour)) }
+                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, price)| { if *index == active_hour { "var(--color-green-500)" } else { "var(--color-blue-500)" } })) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
                 div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }
@@ -91,7 +93,7 @@ struct OptimalizerQuery {
     exp: Option<String>,
 }
 
-async fn builder_handler(
+async fn get_builder_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<OptimalizerQuery>,
 ) -> impl IntoResponse {
@@ -119,13 +121,16 @@ async fn builder_handler(
             pre {
                 (format!("{:?}", condition.evaluate(&exp_context)))
             }
+
+            h2 .text-2xl.font-semibold.mb-4 { "Evaluate in Chart" }
+            // div .mb-4.flex.justify-center { (condition.evaluate_in_chart(&exp_context)) }
         }
     );
 
     Ok(render_layout(content))
 }
 
-async fn builder_update_handler(
+async fn post_builder_handler(
     query: Query<OptimalizerQuery>,
     form_data: Form<ChangeRequest>,
 ) -> impl IntoResponse {
