@@ -108,6 +108,15 @@ impl Condition {
     }
 }
 
+fn format_price(price: f32) -> Markup {
+    html! {
+        (price.floor())
+        span .text-neutral-500 .text-sm {
+            "."(format!("{:02.0}", (price - price.floor()) * 100.0 ))
+        }
+    }
+}
+
 impl crate::web_server::state::DayPrices {
     pub(crate) fn render_table(&self, dist: &Distribution) -> Markup {
         let total_prices = self.total_prices(dist);
@@ -123,8 +132,12 @@ impl crate::web_server::state::DayPrices {
             table {
                 tr {
                     th.pr-10 { "Hour" }
+                    th colspan="2" { "Price EUR/MWh" }
+                }
+                tr {
+                    th.pr-10 { "" }
                     th.pr-10 { "Market" }
-                    th { "Total EUR/MWh" }
+                    th { "With Distribution" }
                 }
                 @for (hour, &price) in self.prices.iter().enumerate() {
                     tr
@@ -134,14 +147,17 @@ impl crate::web_server::state::DayPrices {
                         ."dark:bg-red-900"[total_prices[hour] == total_high]
                     {
 
-                        td .text-center .font-mono .pr-10 {
-                            (hour)" - "(hour+1)
+                        td .text-right .font-mono .pr-10 {
+                            (hour)
+                            span .text-neutral-500 .text-sm {
+                                " : 00 - 59"
+                            }
                         }
                         td .text-right .text-green-700[price<0.0] .font-mono .pr-10 {
-                            (format!("{:2.2}", price))
+                            (format_price(price))
                         }
                         td .text-right .text-green-700[price<0.0] .font-mono {
-                            (format!("{:2.2}", total_prices[hour]))
+                            (format_price(total_prices[hour]))
                         }
                     }
                 }
