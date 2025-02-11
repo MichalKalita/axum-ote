@@ -86,14 +86,6 @@ mod position_tests {
     }
 }
 
-pub fn builder(condition: &Condition) -> Markup {
-    html! {
-        // form #builder method="post" hx-post="" hx-target="body" {
-            (inside_builder(condition, Position::new()))
-        // }
-    }
-}
-
 fn inside_builder(condition: &Condition, position: Position) -> Markup {
     match condition {
         Condition::And(vec) => {

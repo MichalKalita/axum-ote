@@ -1,6 +1,6 @@
 use maud::{html, Markup};
 
-use crate::web_server::state::Distribution;
+use crate::web_server::{conditions::Range, state::Distribution};
 
 use super::conditions::{Condition, Eval, EvaluateContext};
 
@@ -209,7 +209,17 @@ impl RenderHtml for Condition {
                     "Hours: " (from) " - " (to)
                 }
             },
-            Condition::Percentile { value: _, range: _ } => todo!(),
+            Condition::Percentile { value, range } => html! {
+                div .ml-4 {
+                    "Percentile: " (value) " in range "
+                    @match range {
+                        Range::Today => { "today" }
+                        Range::Future => { "future" }
+                        Range::PlusMinusHours(hours) => { "+-" (hours) " hours" }
+                        Range::FromTo(from, to) => { (from) " - " (to) }
+                    }
+                }
+            },
 
             #[cfg(test)]
             Condition::Debug(_) => todo!(),

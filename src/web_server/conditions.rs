@@ -45,12 +45,10 @@ impl Eval for Condition {
             Condition::Percentile {
                 value: target_percentile,
                 range,
-            } => {
-                let actual_percentile = ctx.limit(*range).percentile();
-                println!("actual percentile {}", actual_percentile);
-
-                actual_percentile <= *target_percentile
-            }
+            } => match ctx.limit(*range) {
+                Some(prices) => prices.percentile() <= *target_percentile,
+                None => return false,
+            },
 
             #[cfg(test)]
             Condition::Debug(state) => *state,
@@ -300,6 +298,8 @@ pub enum Range {
     Future,
     #[serde(rename = "range")]
     PlusMinusHours(u32),
+    #[serde(rename = "fromto")]
+    FromTo(u32, u32),
 }
 
 #[derive(Serialize, Debug)]
@@ -319,21 +319,21 @@ impl EvaluateContext {
         }
     }
 
-    fn limit(&self, range: Range) -> PricesContext {
+    fn limit(&self, range: Range) -> Option<PricesContext> {
         match range {
             Range::Today => {
                 let start = (self.prices.now_index / 24) * 24;
                 let prices = self.prices.prices[start..(start + 24)].to_vec();
 
-                PricesContext {
+                Some(PricesContext {
                     now_index: self.prices.now_index - start,
                     prices,
-                }
+                })
             }
-            Range::Future => PricesContext {
+            Range::Future => Some(PricesContext {
                 now_index: 0,
                 prices: self.prices.prices[self.prices.now_index..].to_vec(),
-            },
+            }),
             Range::PlusMinusHours(hours) => {
                 let start = self.prices.now_index.saturating_sub(hours as usize);
                 let end = self
@@ -343,10 +343,31 @@ impl EvaluateContext {
                     .saturating_add(hours as usize);
                 let prices = self.prices.prices[start..end].to_vec();
 
-                PricesContext {
+                Some(PricesContext {
                     now_index: hours as usize,
                     prices,
+                })
+            }
+            Range::FromTo(from, to) => {
+                assert!(from < to, "From must be lower than to");
+
+                let start_of_day = (self.prices.now_index / 24) * 24;
+                let start_of_range = start_of_day.saturating_add(from as usize);
+
+                if self.prices.now_index < start_of_range {
+                    return None;
                 }
+
+                let now_index = self.prices.now_index - start_of_range;
+                let end_of_range = start_of_day.saturating_add(to as usize);
+
+                if now_index >= end_of_range - start_of_range {
+                    return None;
+                }
+
+                let prices = self.prices.prices[start_of_range..end_of_range].to_vec();
+
+                Some(PricesContext { now_index, prices })
             }
         }
     }
@@ -360,16 +381,16 @@ mod evaluate_context_tests {
         EvaluateContext::new(
             NaiveDateTime::parse_from_str("2020-01-01 02:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
             (0..48).map(|i| i as f32).collect(),
-            25, // 2. hour in second day
+            26, // 24 = 0-0:59, 25 = 1-1:59, 26 = 2-2:59
         )
     }
 
     #[test]
     fn test_apply_today() {
         let ctx = setup();
-        let result = ctx.limit(Range::Today);
+        let result = ctx.limit(Range::Today).unwrap();
 
-        assert_eq!(result.now_index, 1); // 2. hour
+        assert_eq!(result.now_index, 2); // 3. hour
         assert_eq!(
             result.prices,
             vec![
@@ -384,14 +405,14 @@ mod evaluate_context_tests {
     #[test]
     fn test_apply_future() {
         let ctx = setup();
-        let result = ctx.limit(Range::Future);
+        let result = ctx.limit(Range::Future).unwrap();
 
         assert_eq!(result.now_index, 0);
         assert_eq!(
             result.prices,
             vec![
-                25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0,
-                39.0, 40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0
+                26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0, 39.0,
+                40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0
             ]
         );
     }
@@ -400,16 +421,39 @@ mod evaluate_context_tests {
     fn test_apply_plus_minus_hours() {
         let ctx = setup();
 
-        let result = ctx.limit(Range::PlusMinusHours(1));
+        let result = ctx.limit(Range::PlusMinusHours(1)).unwrap();
         assert_eq!(result.now_index, 1);
-        assert_eq!(result.prices, vec![24.0, 25.0, 26.0]);
+        assert_eq!(result.prices, vec![25.0, 26.0, 27.0]);
 
-        let result = ctx.limit(Range::PlusMinusHours(3));
+        let result = ctx.limit(Range::PlusMinusHours(3)).unwrap();
         assert_eq!(result.now_index, 3);
         assert_eq!(
             result.prices,
-            vec![22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0]
+            vec![23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0]
         );
+    }
+
+    #[test]
+    fn test_apply_from_to() {
+        let ctx = setup();
+
+        // Out of range
+        let result = ctx.limit(Range::FromTo(0, 2));
+        assert!(result.is_none());
+        let result = ctx.limit(Range::FromTo(3, 4));
+        assert!(result.is_none());
+
+        let result = ctx.limit(Range::FromTo(2, 3)).unwrap();
+        assert_eq!(result.now_index, 0);
+        assert_eq!(result.prices, vec![26.0]);
+
+        let result = ctx.limit(Range::FromTo(2, 4)).unwrap();
+        assert_eq!(result.now_index, 0);
+        assert_eq!(result.prices, vec![26.0, 27.0]);
+
+        let result = ctx.limit(Range::FromTo(0, 5)).unwrap();
+        assert_eq!(result.now_index, 2);
+        assert_eq!(result.prices, vec![24.0, 25.0, 26.0, 27.0, 28.0]);
     }
 }
 

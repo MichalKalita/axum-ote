@@ -100,30 +100,6 @@ impl AppState {
         self.days.get(date).map(|i| i.value().clone())
     }
 
-    /// Find the cheapest hours in row for the next days, return first of them
-    pub async fn find_cheapiest_hours(&self, hours: u8) -> Option<u8> {
-        let date = chrono::Local::now().date_naive();
-        let prices = self.get_prices(&date).await;
-        if prices.is_none() {
-            return None;
-        }
-
-        let prices = prices.unwrap().prices;
-        let mut hour = 0u8;
-        let mut cheapist_price = f32::MAX;
-
-        for i in 0..(24 - hours) {
-            let total_price: f32 = prices.iter().skip(i as usize).take(hours as usize).sum();
-
-            if total_price < cheapist_price {
-                cheapist_price = total_price;
-                hour = i;
-            }
-        }
-
-        Some(hour)
-    }
-
     pub async fn expression_context(&self) -> Option<super::conditions::EvaluateContext> {
         let now = chrono::Local::now();
         let date = now.date_naive();
