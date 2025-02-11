@@ -1,4 +1,3 @@
-mod builder;
 mod conditions;
 mod html_render;
 mod state;
@@ -7,11 +6,10 @@ use axum::{
     extract::{Query, State},
     response::IntoResponse,
     routing::get,
-    Form, Router,
+    Router,
 };
-use builder::additional_condition;
 use chrono::{Local, NaiveDate, Timelike};
-use conditions::{ChangeRequest, Condition, Eval};
+use conditions::{Condition, Eval};
 use maud::html;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -23,10 +21,7 @@ use html_render::{render_layout, ChartSettings, RenderHtml};
 fn create_app(state: state::AppState) -> Router {
     Router::new()
         .route("/", get(fetch_data_handler))
-        .route(
-            "/builder",
-            get(get_builder_handler).post(post_builder_handler),
-        )
+        .route("/builder", get(get_builder_handler))
         .with_state(Arc::new(state))
 }
 
@@ -110,6 +105,12 @@ async fn get_builder_handler(
         None => return Err("Error creating expression context".into()),
     };
 
+    let examples = [
+        r#"/builder?exp=[{"price":120},{"hours":[0,10]}]"#,
+        r#"/builder?exp=[{percentile:{value:0.5,range:{fromto:[0,8]}}}]"#,
+        r#"/builder?exp=[{percentile:{value:0.5,range:"today"}},{not:{hours:[0,8]}}]"#,
+    ];
+
     let content = html!(
         h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
 
@@ -124,29 +125,15 @@ async fn get_builder_handler(
 
             h2 .text-2xl.font-semibold.mb-4 { "Evaluate in Chart" }
             div .mb-4.flex.justify-center { (condition.evaluate_all_in_chart(&exp_context)) }
+
+            h2 .text-2xl.font-semibold.mb-4 { "Examples" }
+            ul {
+                @for example in examples.iter() {
+                    li { a .underline ."hover:text-red-400" href=(example) { (example) } }
+                }
+            }
         }
     );
 
     Ok(render_layout(content))
-}
-
-async fn post_builder_handler(
-    query: Query<OptimalizerQuery>,
-    form_data: Form<ChangeRequest>,
-) -> impl IntoResponse {
-    let condition = query.exp.as_ref().map(|exp| Condition::try_from(exp));
-    let mut condition = match condition {
-        Some(Ok(data)) => data,
-        Some(Err(err)) => return Err(format!("Error parsing expression: {}", err)),
-        None => Condition::And(vec![]),
-    };
-
-    let (diff, new_position) = condition.apply_changes(&form_data)?;
-
-    let exp: &String = &condition.try_into().unwrap();
-    let url = format!("/builder?exp={}", exp);
-
-    let response = additional_condition(&diff, new_position);
-
-    Ok(([("Location", url.clone()), ("HX-Push-Url", url)], response))
 }

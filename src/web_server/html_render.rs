@@ -1,6 +1,9 @@
 use maud::{html, Markup};
 
-use crate::web_server::{conditions::Range, state::Distribution};
+use crate::web_server::{
+    conditions::Range,
+    state::{Distribution, PriceStats},
+};
 
 use super::conditions::{Condition, Eval, EvaluateContext};
 
@@ -43,16 +46,8 @@ impl ChartSettings {
         labels: Option<&[&str]>,
         colors: impl for<'a> Fn(&'a (usize, f32)) -> &'a str,
     ) -> Markup {
-        let cheapiest_hour = prices
-            .iter()
-            .enumerate()
-            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .unwrap();
-        let expensive_hour = prices
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .unwrap();
+        let cheapiest_hour = PriceStats::cheapest_hour(&prices);
+        let expensive_hour = PriceStats::expensive_hour(&prices);
 
         let scale = if *cheapiest_hour.1 < 0.0 {
             self.height / (expensive_hour.1 - cheapiest_hour.1)
@@ -121,12 +116,8 @@ impl crate::web_server::state::DayPrices {
     pub(crate) fn render_table(&self, dist: &Distribution) -> Markup {
         let total_prices = self.total_prices(dist);
 
-        // Find low and high price in total prices
-        let (total_low, total_high) = total_prices
-            .iter()
-            .fold((f32::MAX, f32::MIN), |(low, high), &price| {
-                (low.min(price), high.max(price))
-            });
+        let (_, &total_low) = PriceStats::cheapest_hour(&&(total_prices[..]));
+        let (_, &total_high) = PriceStats::expensive_hour(&&(total_prices[..]));
 
         html! {
             table {

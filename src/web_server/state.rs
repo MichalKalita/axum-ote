@@ -14,24 +14,22 @@ pub struct DayPrices {
 }
 
 pub trait PriceStats {
-    fn cheapest_hour(&self) -> (usize, f32);
-    fn expensive_hour(&self) -> (usize, f32);
+    fn cheapest_hour(&self) -> (usize, &f32);
+    fn expensive_hour(&self) -> (usize, &f32);
 }
 
-impl PriceStats for [f32; 24] {
-    fn cheapest_hour(&self) -> (usize, f32) {
+impl<'a> PriceStats for &'a [f32] {
+    fn cheapest_hour(&self) -> (usize, &f32) {
         self.iter()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .map(|(index, price)| (index, price.clone()))
             .unwrap()
     }
 
-    fn expensive_hour(&self) -> (usize, f32) {
+    fn expensive_hour(&self) -> (usize, &f32) {
         self.iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .map(|(index, price)| (index, price.clone()))
             .unwrap()
     }
 }
