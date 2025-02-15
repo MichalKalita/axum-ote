@@ -115,11 +115,11 @@ impl AppState {
 
         let prices: (Option<DayPrices>, Option<DayPrices>, Option<DayPrices>) =
             if hour >= NEXT_DAY_PRICES_HOUR {
+                join!(join_yesterday, join_today, join_tomorrow)
+            } else {
                 let (yesterday, today) = join!(join_yesterday, join_today);
 
                 (yesterday, today, None)
-            } else {
-                join!(join_yesterday, join_today, join_tomorrow)
             };
 
         match prices {

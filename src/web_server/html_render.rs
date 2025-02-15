@@ -61,7 +61,7 @@ impl ChartSettings {
         }) + 15.0;
 
         html! {
-            svg width=(24 * (self.bar_width + self.bar_spacing)) height=(self.height + 30.0) {
+            svg width=(prices.len() * (self.bar_width + self.bar_spacing)) height=(self.height + 30.0) {
                 g {
                     @for (hour, &price) in prices.iter().enumerate() {
                         rect x=(hour * (self.bar_width + self.bar_spacing)) y=(zero_offset - (price * scale))
