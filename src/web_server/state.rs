@@ -4,6 +4,7 @@ use crate::data_loader::fetch_data;
 use chrono::Timelike;
 use dashmap::DashMap;
 use serde::Serialize;
+use tokio::join;
 
 use super::conditions::EvaluateContext;
 
@@ -70,6 +71,8 @@ pub struct AppState {
     pub distribution: Distribution,
 }
 
+const NEXT_DAY_PRICES_HOUR: u32 = 13;
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -98,16 +101,50 @@ impl AppState {
         self.days.get(date).map(|i| i.value().clone())
     }
 
-    pub async fn expression_context(&self) -> Option<super::conditions::EvaluateContext> {
+    pub async fn expression_context(&self) -> Option<EvaluateContext> {
         let now = chrono::Local::now();
-        let date = now.date_naive();
         let hour = now.time().hour();
-        let prices = self.get_prices(&date).await?.prices;
 
-        Some(EvaluateContext::new(
-            now.naive_local(),
-            prices.to_vec(),
-            hour.try_into().unwrap(),
-        ))
+        let today = now.date_naive();
+        let yesterday = today - chrono::Duration::days(1);
+        let tomorrow = today + chrono::Duration::days(1);
+
+        let join_yesterday = self.get_prices(&yesterday);
+        let join_today = self.get_prices(&today);
+        let join_tomorrow = self.get_prices(&tomorrow);
+
+        let prices: (Option<DayPrices>, Option<DayPrices>, Option<DayPrices>) =
+            if hour >= NEXT_DAY_PRICES_HOUR {
+                let (yesterday, today) = join!(join_yesterday, join_today);
+
+                (yesterday, today, None)
+            } else {
+                join!(join_yesterday, join_today, join_tomorrow)
+            };
+
+        match prices {
+            (yesterday, Some(today), tomorrow) => {
+                let mut prices: Vec<f32> = Vec::new();
+                let mut offset = 0;
+
+                if let Some(yesterday) = yesterday {
+                    prices.extend_from_slice(&yesterday.prices);
+                    offset = 24;
+                }
+
+                prices.extend_from_slice(&today.prices);
+
+                if let Some(tomorrow) = tomorrow {
+                    prices.extend_from_slice(&tomorrow.prices);
+                }
+
+                Some(EvaluateContext::new(
+                    now.naive_local(),
+                    prices,
+                    (hour + offset) as usize,
+                ))
+            }
+            _ => None,
+        }
     }
 }
