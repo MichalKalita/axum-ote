@@ -211,6 +211,11 @@ impl RenderHtml for Condition {
                     }
                 }
             },
+            Condition::Cheap { hours, from, to } => html! {
+                div .ml-4 {
+                    "Cheap: " (hours) " cheapiest hours in hours " (from) " - " (to)
+                }
+            },
 
             #[cfg(test)]
             Condition::Debug(_) => todo!(),

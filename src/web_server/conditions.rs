@@ -2,20 +2,23 @@ use chrono::{NaiveDateTime, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum Condition {
-    #[serde(rename = "and")]
     And(Vec<Condition>),
-    #[serde(rename = "or")]
     Or(Vec<Condition>),
-    #[serde(rename = "not")]
     Not(Box<Condition>),
 
-    #[serde(rename = "price")]
     Price(f32),
-    #[serde(rename = "hours")]
     Hours(u32, u32),
-    #[serde(rename = "percentile")]
-    Percentile { value: f32, range: Range },
+    Percentile {
+        value: f32,
+        range: Range,
+    },
+    Cheap {
+        hours: u8,
+        from: u8,
+        to: u8,
+    },
 
     #[cfg(test)]
     Debug(bool),
@@ -47,6 +50,20 @@ impl Eval for Condition {
                 Some(prices) => prices.percentile() <= *target_percentile,
                 None => return false,
             },
+            Condition::Cheap { hours, from, to } => {
+                let prices = ctx.slice(*from as usize, *to as usize);
+                if let Some(mut prices) = prices {
+                    prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    let actual_price = ctx.actual_price();
+                    let actual_price_position = prices
+                        .iter()
+                        .position(|price| actual_price < *price)
+                        .unwrap_or(prices.len());
+                    actual_price_position <= *hours as usize
+                } else {
+                    false
+                }
+            }
 
             #[cfg(test)]
             Condition::Debug(state) => *state,
@@ -202,6 +219,64 @@ mod condition_tests {
     }
 
     #[test]
+    fn test_cheap() {
+        // Actual hours is 2:00 - 2:59
+        let ctx = setup();
+
+        // Single price, always true
+        assert_eq!(
+            Condition::Cheap {
+                hours: 1,
+                from: 2,
+                to: 2,
+            }
+            .evaluate(&ctx),
+            true
+        );
+
+        assert_eq!(
+            Condition::Cheap {
+                hours: 1,
+                from: 2,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            true
+        );
+
+        // Out of range
+        assert_eq!(
+            Condition::Cheap {
+                hours: 24,
+                from: 3,
+                to: 24,
+            }
+            .evaluate(&ctx),
+            false
+        );
+
+        // Real usage
+        assert_eq!(
+            Condition::Cheap {
+                hours: 3,
+                from: 0,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            true
+        );
+        assert_eq!(
+            Condition::Cheap {
+                hours: 2,
+                from: 0,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            false
+        );
+    }
+
+    #[test]
     fn test_not() {
         let ctx = setup();
 
@@ -317,6 +392,49 @@ impl EvaluateContext {
         }
     }
 
+    fn actual_price(&self) -> f32 {
+        self.prices.prices[self.prices.now_index]
+    }
+
+    fn slice(&self, from: usize, to: usize) -> Option<Vec<f32>> {
+        let offset = self.prices.now_index / 24 * 24;
+        let from = from + offset;
+        let to = to + offset;
+
+        let mut prices: Vec<f32> = Vec::new();
+
+        if from == to {
+            // Example from = 10, to = 10
+            prices.push(self.prices.prices[from]);
+            if self.prices.now_index != from {
+                return None;
+            }
+        } else if from < to {
+            // Example from = 10, to = 12
+            let range = from..to;
+            prices.extend_from_slice(&self.prices.prices[range.clone()]);
+
+            if !range.contains(&self.prices.now_index) {
+                return None;
+            }
+        } else {
+            // Example from = 22, to = 2
+            let first_range = from..(offset + 24);
+            let second_range = offset..to;
+
+            prices.extend_from_slice(&self.prices.prices[first_range.clone()]);
+            prices.extend_from_slice(&self.prices.prices[second_range.clone()]);
+
+            if !first_range.contains(&self.prices.now_index)
+                && !second_range.contains(&self.prices.now_index)
+            {
+                return None;
+            }
+        }
+
+        Some(prices)
+    }
+
     fn limit(&self, range: Range) -> Option<PricesContext> {
         match range {
             Range::Today => {
@@ -384,7 +502,41 @@ mod evaluate_context_tests {
     }
 
     #[test]
-    fn test_apply_today() {
+    fn test_actual_price() {
+        let ctx = setup();
+        assert_eq!(ctx.actual_price(), 26.0);
+    }
+
+    #[test]
+    fn test_slice() {
+        let ctx = setup();
+
+        assert_eq!(
+            ctx.slice(0, 24),
+            Some(vec![
+                // Actual day, 0 - 12h
+                24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0,
+                // 13-24h
+                36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0
+            ])
+        );
+
+        // Out of range
+        assert_eq!(ctx.slice(0, 2), None);
+        assert_eq!(ctx.slice(3, 24), None);
+
+        // Actual hour
+        assert_eq!(ctx.slice(2, 3), Some(vec![26.0]));
+
+        // Over midnight
+        assert_eq!(
+            ctx.slice(20, 4),
+            Some(vec![44.0, 45.0, 46.0, 47.0, 24.0, 25.0, 26.0, 27.0])
+        );
+    }
+
+    #[test]
+    fn test_limit_today() {
         let ctx = setup();
         let result = ctx.limit(Range::Today).unwrap();
 
@@ -401,7 +553,7 @@ mod evaluate_context_tests {
     }
 
     #[test]
-    fn test_apply_future() {
+    fn test_limit_future() {
         let ctx = setup();
         let result = ctx.limit(Range::Future).unwrap();
 
@@ -416,7 +568,7 @@ mod evaluate_context_tests {
     }
 
     #[test]
-    fn test_apply_plus_minus_hours() {
+    fn test_limit_plus_minus_hours() {
         let ctx = setup();
 
         let result = ctx.limit(Range::PlusMinusHours(1)).unwrap();
@@ -432,7 +584,7 @@ mod evaluate_context_tests {
     }
 
     #[test]
-    fn test_apply_from_to() {
+    fn test_limit_from_to() {
         let ctx = setup();
 
         // Out of range
