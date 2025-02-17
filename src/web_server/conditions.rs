@@ -10,10 +10,6 @@ pub enum Condition {
 
     Price(f32),
     Hours(u32, u32),
-    Percentile {
-        value: f32,
-        range: Range,
-    },
     Cheap {
         hours: u8,
         from: u8,
@@ -43,13 +39,6 @@ impl Eval for Condition {
 
                 *min <= hour && hour <= *max
             }
-            Condition::Percentile {
-                value: target_percentile,
-                range,
-            } => match ctx.limit(*range) {
-                Some(prices) => prices.percentile() <= *target_percentile,
-                None => return false,
-            },
             Condition::Cheap { hours, from, to } => {
                 let prices = ctx.slice(*from as usize, *to as usize);
 
@@ -130,7 +119,7 @@ mod condition_tests {
 
     use crate::web_server::conditions::Eval;
 
-    use super::{Condition, EvaluateContext, Range};
+    use super::{Condition, EvaluateContext};
 
     fn setup() -> EvaluateContext {
         EvaluateContext::new(
@@ -174,49 +163,6 @@ mod condition_tests {
                 false, false, false, false, false, false, false, false, false, false, false, false
             ]
         );
-    }
-
-    #[test]
-    fn test_percentile() {
-        let ctx = setup();
-
-        let result = Condition::Percentile {
-            value: 0.09,
-            range: Range::Today, // calculated percentil is 0.08695652
-        }
-        .evaluate(&ctx);
-        assert_eq!(result, true);
-
-        let result = Condition::Percentile {
-            value: 0.08,
-            range: Range::Today, // calculated percentil is 0.08695652
-        }
-        .evaluate(&ctx);
-        assert_eq!(result, false);
-
-        let result = Condition::Percentile {
-            value: 0.0,
-            range: Range::Future,
-        }
-        .evaluate(&ctx);
-        assert_eq!(
-            result, true,
-            "this is cheapiest one price in now and future"
-        );
-
-        let result = Condition::Percentile {
-            value: 0.51,
-            range: Range::PlusMinusHours(1),
-        }
-        .evaluate(&ctx);
-        assert_eq!(result, true);
-
-        let result = Condition::Percentile {
-            value: 0.49,
-            range: Range::PlusMinusHours(1),
-        }
-        .evaluate(&ctx);
-        assert_eq!(result, false);
     }
 
     mod cheap_tests {
@@ -452,18 +398,6 @@ mod condition_tests {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-pub enum Range {
-    #[serde(rename = "today")]
-    Today,
-    #[serde(rename = "future")]
-    Future,
-    #[serde(rename = "range")]
-    PlusMinusHours(u32),
-    #[serde(rename = "fromto")]
-    FromTo(u32, u32),
-}
-
 #[derive(Serialize, Debug)]
 pub struct EvaluateContext {
     pub now: NaiveDateTime,
@@ -493,59 +427,6 @@ impl EvaluateContext {
         }
 
         Some(self.prices.prices[range.0..range.1].to_vec())
-    }
-
-    fn limit(&self, range: Range) -> Option<PricesContext> {
-        match range {
-            Range::Today => {
-                let start = (self.prices.now_index / 24) * 24;
-                let prices = self.prices.prices[start..(start + 24)].to_vec();
-
-                Some(PricesContext {
-                    now_index: self.prices.now_index - start,
-                    prices,
-                })
-            }
-            Range::Future => Some(PricesContext {
-                now_index: 0,
-                prices: self.prices.prices[self.prices.now_index..].to_vec(),
-            }),
-            Range::PlusMinusHours(hours) => {
-                let start = self.prices.now_index.saturating_sub(hours as usize);
-                let end = self
-                    .prices
-                    .now_index
-                    .saturating_add(1)
-                    .saturating_add(hours as usize);
-                let prices = self.prices.prices[start..end].to_vec();
-
-                Some(PricesContext {
-                    now_index: hours as usize,
-                    prices,
-                })
-            }
-            Range::FromTo(from, to) => {
-                assert!(from < to, "From must be lower than to");
-
-                let start_of_day = (self.prices.now_index / 24) * 24;
-                let start_of_range = start_of_day.saturating_add(from as usize);
-
-                if self.prices.now_index < start_of_range {
-                    return None;
-                }
-
-                let now_index = self.prices.now_index - start_of_range;
-                let end_of_range = start_of_day.saturating_add(to as usize);
-
-                if now_index >= end_of_range - start_of_range {
-                    return None;
-                }
-
-                let prices = self.prices.prices[start_of_range..end_of_range].to_vec();
-
-                Some(PricesContext { now_index, prices })
-            }
-        }
     }
 }
 
@@ -686,180 +567,10 @@ mod evaluate_context_tests {
         ctx.prices.now_index = 47;
         assert_eq!(ctx.slice(22, 2), None);
     }
-
-    #[test]
-    fn test_limit_today() {
-        let ctx = setup();
-        let result = ctx.limit(Range::Today).unwrap();
-
-        assert_eq!(result.now_index, 2); // 3. hour
-        assert_eq!(
-            result.prices,
-            vec![
-                // 0. hour - 12. hour
-                24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0,
-                // 12. hour - 24. hour
-                36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0
-            ]
-        );
-    }
-
-    #[test]
-    fn test_limit_future() {
-        let ctx = setup();
-        let result = ctx.limit(Range::Future).unwrap();
-
-        assert_eq!(result.now_index, 0);
-        assert_eq!(
-            result.prices,
-            vec![
-                26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0, 39.0,
-                40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0
-            ]
-        );
-    }
-
-    #[test]
-    fn test_limit_plus_minus_hours() {
-        let ctx = setup();
-
-        let result = ctx.limit(Range::PlusMinusHours(1)).unwrap();
-        assert_eq!(result.now_index, 1);
-        assert_eq!(result.prices, vec![25.0, 26.0, 27.0]);
-
-        let result = ctx.limit(Range::PlusMinusHours(3)).unwrap();
-        assert_eq!(result.now_index, 3);
-        assert_eq!(
-            result.prices,
-            vec![23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0]
-        );
-    }
-
-    #[test]
-    fn test_limit_from_to() {
-        let ctx = setup();
-
-        // Out of range
-        let result = ctx.limit(Range::FromTo(0, 2));
-        assert!(result.is_none());
-        let result = ctx.limit(Range::FromTo(3, 4));
-        assert!(result.is_none());
-
-        let result = ctx.limit(Range::FromTo(2, 3)).unwrap();
-        assert_eq!(result.now_index, 0);
-        assert_eq!(result.prices, vec![26.0]);
-
-        let result = ctx.limit(Range::FromTo(2, 4)).unwrap();
-        assert_eq!(result.now_index, 0);
-        assert_eq!(result.prices, vec![26.0, 27.0]);
-
-        let result = ctx.limit(Range::FromTo(0, 5)).unwrap();
-        assert_eq!(result.now_index, 2);
-        assert_eq!(result.prices, vec![24.0, 25.0, 26.0, 27.0, 28.0]);
-    }
 }
 
 #[derive(Serialize, Debug)]
 pub struct PricesContext {
     pub prices: Vec<f32>,
     pub now_index: usize,
-}
-
-impl PricesContext {
-    fn percentile(&self) -> f32 {
-        assert!(!self.prices.is_empty(), "Empty input");
-        assert!(self.now_index < self.prices.len(), "Out of bound index");
-
-        if self.prices.len() == 1 {
-            return 1.0;
-        }
-
-        // Get the target price based on the index
-        let target_price = self.prices[self.now_index];
-
-        // Sort prices in ascending order
-        let mut sorted = self.prices.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        // Find the position of the target price in the sorted array
-        let position = sorted.iter().position(|&x| x == target_price).unwrap();
-
-        // Calculate the percentile as the ratio of the position to the array length
-        (position as f32) / (self.prices.len() as f32 - 1.0)
-    }
-}
-
-#[cfg(test)]
-mod prices_context_test {
-    use super::PricesContext;
-
-    #[test]
-    fn test_percentile_low() {
-        let range = PricesContext {
-            now_index: 0,
-            prices: vec![1.0, 2.0, 3.0],
-        };
-
-        assert_eq!(range.percentile(), 0.0);
-    }
-
-    #[test]
-    fn test_percentile_high() {
-        let range = PricesContext {
-            now_index: 2,
-            prices: vec![1.0, 2.0, 3.0],
-        };
-
-        assert_eq!(range.percentile(), 1.0);
-    }
-
-    #[test]
-    fn test_percentile_middle() {
-        let range = PricesContext {
-            now_index: 1,
-            prices: vec![1.0, 2.0, 3.0],
-        };
-
-        assert_eq!(range.percentile(), 0.5);
-    }
-
-    #[test]
-    fn test_percentile_single() {
-        let range = PricesContext {
-            now_index: 0,
-            prices: vec![1.0],
-        };
-
-        assert_eq!(range.percentile(), 1.0);
-    }
-
-    #[test]
-    fn test_percentile_random() {
-        let range = PricesContext {
-            now_index: 1,
-            prices: vec![1.0, 2.0, 3.0, 4.0, 5.0],
-        };
-
-        assert_eq!(range.percentile(), 0.25);
-    }
-
-    #[test]
-    #[should_panic(expected = "Empty input")]
-    fn test_percentile_empty() {
-        PricesContext {
-            now_index: 0,
-            prices: vec![],
-        }
-        .percentile();
-    }
-
-    #[test]
-    #[should_panic(expected = "Out of bound index")]
-    fn test_percentile_out_of_bound() {
-        PricesContext {
-            now_index: 2,
-            prices: vec![1.0],
-        }
-        .percentile();
-    }
 }
