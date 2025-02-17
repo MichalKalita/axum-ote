@@ -8,7 +8,8 @@ use axum::{
     routing::get,
     Router,
 };
-use chrono::{Local, NaiveDate, Timelike};
+use chrono::{NaiveDate, Timelike, Utc};
+use chrono_tz::Europe::Prague;
 use conditions::{Condition, Eval};
 use maud::html;
 use reqwest::StatusCode;
@@ -48,7 +49,7 @@ async fn fetch_data_handler(
     State(state): State<Arc<state::AppState>>,
     query: Query<QueryParams>,
 ) -> impl IntoResponse {
-    let now = Local::now();
+    let now = Utc::now().with_timezone(&Prague);
     let today = now.date_naive();
     let input_date = query.date.unwrap_or(today);
 

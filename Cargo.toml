@@ -17,6 +17,7 @@ maud = { version = "*", features = ["axum"] }
 env_logger = "*"
 dashmap = "*"
 json5 = "*"
+chrono-tz = "*"
 
 [profile.release]
 strip = true

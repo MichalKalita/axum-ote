@@ -1,7 +1,8 @@
 use core::f32;
 
 use crate::data_loader::fetch_data;
-use chrono::Timelike;
+use chrono::{Timelike, Utc};
+use chrono_tz::Europe::Prague;
 use dashmap::DashMap;
 use serde::Serialize;
 use tokio::join;
@@ -102,7 +103,7 @@ impl AppState {
     }
 
     pub async fn expression_context(&self) -> Option<EvaluateContext> {
-        let now = chrono::Local::now();
+        let now = Utc::now().with_timezone(&Prague);
         let hour = now.time().hour();
 
         let today = now.date_naive();

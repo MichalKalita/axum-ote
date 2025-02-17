@@ -1,7 +1,8 @@
 mod data_loader;
 mod web_server;
 
-use chrono::Local;
+use chrono::Utc;
+use chrono_tz::Europe::Prague;
 use clap::Parser;
 use data_loader::fetch_data;
 use std::error::Error;
@@ -36,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn print() {
-    let today = Local::now().date_naive();
+    let today = Utc::now().with_timezone(&Prague).date_naive();
     match fetch_data(today).await {
         Ok(prices) => {
             println!("Prices:");
