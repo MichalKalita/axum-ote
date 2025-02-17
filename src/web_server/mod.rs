@@ -22,6 +22,7 @@ fn create_app(state: state::AppState) -> Router {
     Router::new()
         .route("/", get(fetch_data_handler))
         .route("/builder", get(get_builder_handler))
+        .route("/automation", get(get_automation_handler))
         .with_state(Arc::new(state))
 }
 
@@ -105,6 +106,12 @@ async fn get_builder_handler(
         None => return Err("Error creating expression context".into()),
     };
 
+    const DOMAIN: &str = "https://ota.kalita.cz";
+    let automation_url = format!(
+        "{DOMAIN}/automation?exp={}",
+        query.exp.clone().unwrap_or("".into())
+    );
+
     let examples = [r#"/builder?exp=[{"price":120},{"hours":[0,10]}]"#];
 
     let content = html!(
@@ -118,6 +125,7 @@ async fn get_builder_handler(
             pre {
                 (format!("{:?}", condition.evaluate(&exp_context)))
             }
+            a href=(automation_url) { "URL for automation tools " (automation_url) }
 
             h2 .text-2xl.font-semibold.mb-4 { "Evaluate in Chart" }
             div .mb-4.flex.justify-center { (condition.evaluate_all_in_chart(&exp_context)) }
@@ -132,4 +140,26 @@ async fn get_builder_handler(
     );
 
     Ok(render_layout(content))
+}
+
+async fn get_automation_handler(
+    State(state): State<Arc<state::AppState>>,
+    query: Query<OptimalizerQuery>,
+) -> impl IntoResponse {
+    let condition = query.exp.as_ref().map(|exp| Condition::try_from(exp));
+
+    let condition = match condition {
+        Some(Ok(data)) => data,
+        Some(Err(err)) => return Err(format!("Error parsing expression: {}", err)),
+        None => Condition::And(vec![]),
+    };
+
+    let exp_context = match state.expression_context().await {
+        Some(context) => context,
+        None => return Err("Error creating expression context".into()),
+    };
+
+    let result = condition.evaluate(&exp_context);
+
+    Ok(format!("{:?}", result))
 }
