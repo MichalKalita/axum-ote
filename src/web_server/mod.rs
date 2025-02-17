@@ -126,6 +126,8 @@ async fn get_builder_handler(
             h2 .text-2xl.font-semibold.mb-4 { "Evaluate in Chart" }
             div .mb-4.flex.justify-center { (condition.evaluate_all_in_chart(&exp_context)) }
 
+            pre { (format!("{:?}", exp_context)) }
+
             h2 .text-2xl.font-semibold.mb-4 { "Examples" }
             ul {
                 @for example in examples.iter() {

@@ -52,6 +52,7 @@ impl Eval for Condition {
             },
             Condition::Cheap { hours, from, to } => {
                 let prices = ctx.slice(*from as usize, *to as usize);
+
                 if let Some(mut prices) = prices {
                     prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     let actual_price = ctx.actual_price();
@@ -218,62 +219,150 @@ mod condition_tests {
         assert_eq!(result, false);
     }
 
-    #[test]
-    fn test_cheap() {
-        // Actual hours is 2:00 - 2:59
-        let ctx = setup();
+    mod cheap_tests {
+        use chrono::NaiveDateTime;
 
-        // Single price, always true
-        assert_eq!(
-            Condition::Cheap {
-                hours: 1,
-                from: 2,
-                to: 2,
-            }
-            .evaluate(&ctx),
-            true
-        );
+        use crate::web_server::conditions::{
+            condition_tests::setup, Condition, Eval, EvaluateContext,
+        };
 
-        assert_eq!(
-            Condition::Cheap {
-                hours: 1,
-                from: 2,
-                to: 3,
-            }
-            .evaluate(&ctx),
-            true
-        );
+        #[test]
+        fn test_cheap_today() {
+            // Actual hours is 2:00 - 2:59
+            let ctx = setup();
 
-        // Out of range
-        assert_eq!(
-            Condition::Cheap {
-                hours: 24,
-                from: 3,
-                to: 24,
-            }
-            .evaluate(&ctx),
-            false
-        );
+            // Single price, always true
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 1,
+                    from: 2,
+                    to: 3,
+                }
+                .evaluate(&ctx),
+                true
+            );
 
-        // Real usage
-        assert_eq!(
-            Condition::Cheap {
-                hours: 3,
-                from: 0,
-                to: 3,
-            }
-            .evaluate(&ctx),
-            true
-        );
-        assert_eq!(
-            Condition::Cheap {
-                hours: 2,
-                from: 0,
-                to: 3,
-            }
-            .evaluate(&ctx),
-            false
-        );
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 1,
+                    from: 2,
+                    to: 3,
+                }
+                .evaluate(&ctx),
+                true
+            );
+
+            // Out of range
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 24,
+                    from: 3,
+                    to: 24,
+                }
+                .evaluate(&ctx),
+                false
+            );
+
+            // Real usage
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 3,
+                    from: 0,
+                    to: 3,
+                }
+                .evaluate(&ctx),
+                true
+            );
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 2,
+                    from: 0,
+                    to: 3,
+                }
+                .evaluate(&ctx),
+                false
+            );
+        }
+
+        #[test]
+        fn test_cheap_yesterday_today() {
+            let mut ctx = EvaluateContext::new(
+                NaiveDateTime::parse_from_str("2025-02-16 09:43:44", "%Y-%m-%d %H:%M:%S").unwrap(),
+                vec![
+                    // yesterday 0-12
+                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                    // yesterday 12-24
+                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                    // today 0-12
+                    9.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                    // today 12-24
+                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0,
+                ],
+                24,
+            );
+
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 1,
+                    from: 23,
+                    to: 1,
+                }
+                .evaluate(&ctx),
+                true
+            );
+
+            ctx.prices.prices[23] = 8.0;
+
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 1,
+                    from: 23,
+                    to: 1,
+                }
+                .evaluate(&ctx),
+                false
+            );
+        }
+
+        #[test]
+        fn test_cheap_today_tomorrow() {
+            let mut ctx = EvaluateContext::new(
+                NaiveDateTime::parse_from_str("2025-02-16 09:43:44", "%Y-%m-%d %H:%M:%S").unwrap(),
+                vec![
+                    // today 0-12
+                    1.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                    // today 12-24
+                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 9.0,
+                    // tomorrow 0-12
+                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                    // tomorrow 12-24
+                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                ],
+                23,
+            );
+
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 1,
+                    from: 23,
+                    to: 1,
+                }
+                .evaluate(&ctx),
+                true
+            );
+
+            ctx.prices.prices[24] = 8.0;
+
+            assert_eq!(
+                Condition::Cheap {
+                    hours: 1,
+                    from: 23,
+                    to: 1,
+                }
+                .evaluate(&ctx),
+                false
+            );
+        }
     }
 
     #[test]
@@ -397,42 +486,13 @@ impl EvaluateContext {
     }
 
     fn slice(&self, from: usize, to: usize) -> Option<Vec<f32>> {
-        let offset = self.prices.now_index / 24 * 24;
-        let from = from + offset;
-        let to = to + offset;
+        let range = find_time_range(self.prices.now_index, from as u8, to as u8)?;
 
-        let mut prices: Vec<f32> = Vec::new();
-
-        if from == to {
-            // Example from = 10, to = 10
-            prices.push(self.prices.prices[from]);
-            if self.prices.now_index != from {
-                return None;
-            }
-        } else if from < to {
-            // Example from = 10, to = 12
-            let range = from..to;
-            prices.extend_from_slice(&self.prices.prices[range.clone()]);
-
-            if !range.contains(&self.prices.now_index) {
-                return None;
-            }
-        } else {
-            // Example from = 22, to = 2
-            let first_range = from..(offset + 24);
-            let second_range = offset..to;
-
-            prices.extend_from_slice(&self.prices.prices[first_range.clone()]);
-            prices.extend_from_slice(&self.prices.prices[second_range.clone()]);
-
-            if !first_range.contains(&self.prices.now_index)
-                && !second_range.contains(&self.prices.now_index)
-            {
-                return None;
-            }
+        if range.1 > self.prices.prices.len() {
+            return None;
         }
 
-        Some(prices)
+        Some(self.prices.prices[range.0..range.1].to_vec())
     }
 
     fn limit(&self, range: Range) -> Option<PricesContext> {
@@ -489,6 +549,87 @@ impl EvaluateContext {
     }
 }
 
+/// Given:
+/// - `current_hour_idx`: the current hour in "absolute" indexing (e.g., 0..72 for 3 days),
+/// - `from_hour` (inclusive, 0..23),
+/// - `to_hour`   (exclusive, 0..23),
+///
+/// this function determines whether `current_hour_idx` lies in the interval
+/// [start_idx..end_idx) derived from the given `from_hour..to_hour`.
+///
+/// If `current_hour_idx` is within that interval, returns `Some((start_idx, end_idx))`.
+/// Otherwise, returns `None`.
+///
+/// The interval may cross midnight (e.g., 22..4) in which case the "to" day
+/// is `day_offset_from + 1`.
+fn find_time_range(
+    current_hour_idx: usize,
+    from_hour: u8, // inclusive
+    to_hour: u8,   // exclusive
+) -> Option<(usize, usize)> {
+    // Determine the current day and hour.
+    let current_day = current_hour_idx / 24;
+    let current_hour = current_hour_idx % 24;
+
+    // Decide if `from_hour` belongs to "today" or "yesterday".
+    // If from_hour > current_hour, we shift to the previous day.
+    let mut from_day_offset = current_day as isize;
+    if from_hour as usize > current_hour {
+        from_day_offset -= 1;
+    }
+
+    // Check if the range crosses midnight (e.g. 22..4).
+    // If from_hour > to_hour, it must cross midnight.
+    let crosses_midnight = from_hour > to_hour;
+    let mut to_day_offset = from_day_offset;
+    if crosses_midnight {
+        to_day_offset += 1;
+    }
+
+    // Calculate the absolute start and end indices, with `end_idx` being exclusive.
+    let start_isize = from_day_offset * 24 + from_hour as isize;
+    let end_isize = to_day_offset * 24 + to_hour as isize; // exclusive
+
+    // If they are negative, we can't convert to usize, so return None.
+    if start_isize < 0 || end_isize < 0 {
+        return None;
+    }
+    let start_idx = start_isize as usize;
+    let end_idx = end_isize as usize;
+
+    // Check if current_hour_idx lies in [start_idx, end_idx).
+    if start_idx <= current_hour_idx && current_hour_idx < end_idx {
+        Some((start_idx, end_idx))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod find_time_range_tests {
+    use crate::web_server::conditions::find_time_range;
+
+    #[test]
+    fn test_find_time_range() {
+        assert_eq!(find_time_range(0, 0, 0), None);
+        assert_eq!(find_time_range(0, 0, 8), Some((0, 8)));
+        assert_eq!(find_time_range(0, 0, 24), Some((0, 24)));
+        assert_eq!(find_time_range(26, 0, 24), Some((24, 48)));
+        assert_eq!(find_time_range(0, 1, 8), None);
+
+        assert_eq!(find_time_range(23, 23, 24), Some((23, 24)));
+        assert_eq!(find_time_range(24, 23, 24), None);
+        assert_eq!(find_time_range(47, 23, 24), Some((47, 48)));
+
+        assert_eq!(find_time_range(23, 23, 1), Some((23, 25)));
+        assert_eq!(find_time_range(24, 23, 1), Some((23, 25)));
+        assert_eq!(find_time_range(47, 23, 1), Some((47, 49)));
+
+        assert_eq!(find_time_range(0, 0, 24), Some((0, 24)));
+        assert_eq!(find_time_range(24, 0, 24), Some((24, 48)));
+    }
+}
+
 #[cfg(test)]
 mod evaluate_context_tests {
     use super::*;
@@ -528,11 +669,22 @@ mod evaluate_context_tests {
         // Actual hour
         assert_eq!(ctx.slice(2, 3), Some(vec![26.0]));
 
-        // Over midnight
-        assert_eq!(
-            ctx.slice(20, 4),
-            Some(vec![44.0, 45.0, 46.0, 47.0, 24.0, 25.0, 26.0, 27.0])
-        );
+        // Over midnight, tests other day but same results
+        let mut ctx = setup();
+        ctx.prices.now_index = 23;
+        assert_eq!(ctx.slice(22, 2), Some(vec![22.0, 23.0, 24.0, 25.0]));
+
+        let mut ctx = setup();
+        ctx.prices.now_index = 24;
+        assert_eq!(ctx.slice(22, 2), Some(vec![22.0, 23.0, 24.0, 25.0]));
+
+        let mut ctx = setup();
+        ctx.prices.now_index = 0;
+        assert_eq!(ctx.slice(22, 2), None);
+
+        let mut ctx = setup();
+        ctx.prices.now_index = 47;
+        assert_eq!(ctx.slice(22, 2), None);
     }
 
     #[test]
