@@ -105,11 +105,7 @@ async fn get_builder_handler(
         None => return Err("Error creating expression context".into()),
     };
 
-    let examples = [
-        r#"/builder?exp=[{"price":120},{"hours":[0,10]}]"#,
-        r#"/builder?exp=[{percentile:{value:0.5,range:{fromto:[0,8]}}}]"#,
-        r#"/builder?exp=[{percentile:{value:0.5,range:"today"}},{not:{hours:[0,8]}}]"#,
-    ];
+    let examples = [r#"/builder?exp=[{"price":120},{"hours":[0,10]}]"#];
 
     let content = html!(
         h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
@@ -125,8 +121,6 @@ async fn get_builder_handler(
 
             h2 .text-2xl.font-semibold.mb-4 { "Evaluate in Chart" }
             div .mb-4.flex.justify-center { (condition.evaluate_all_in_chart(&exp_context)) }
-
-            pre { (format!("{:?}", exp_context)) }
 
             h2 .text-2xl.font-semibold.mb-4 { "Examples" }
             ul {

@@ -404,6 +404,12 @@ pub struct EvaluateContext {
     pub prices: PricesContext,
 }
 
+#[derive(Serialize, Debug)]
+pub struct PricesContext {
+    pub prices: Vec<f32>,
+    pub now_index: usize,
+}
+
 impl EvaluateContext {
     pub(crate) fn new(now: NaiveDateTime, prices: Vec<f32>, target_price_index: usize) -> Self {
         Self {
@@ -567,10 +573,4 @@ mod evaluate_context_tests {
         ctx.prices.now_index = 47;
         assert_eq!(ctx.slice(22, 2), None);
     }
-}
-
-#[derive(Serialize, Debug)]
-pub struct PricesContext {
-    pub prices: Vec<f32>,
-    pub now_index: usize,
 }
