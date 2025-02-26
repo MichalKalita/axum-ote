@@ -17,13 +17,13 @@ use serde::Deserialize;
 
 use std::sync::Arc;
 
-use html_render::{render_layout, ChartSettings, RenderHtml};
+use html_render::{link, render_layout, ChartSettings, RenderHtml};
 
 fn create_app(state: state::AppState) -> Router {
     Router::new()
-        .route("/", get(fetch_data_handler))
-        .route("/builder", get(get_builder_handler))
-        .route("/automation", get(get_automation_handler))
+        .route("/", get(route_get_root))
+        .route("/optimizer", get(route_get_optimizer))
+        .route("/opt", get(route_get_opt))
         .with_state(Arc::new(state))
 }
 
@@ -45,7 +45,7 @@ struct QueryParams {
     date: Option<NaiveDate>,
 }
 
-async fn fetch_data_handler(
+async fn route_get_root(
     State(state): State<Arc<state::AppState>>,
     query: Query<QueryParams>,
 ) -> impl IntoResponse {
@@ -67,13 +67,19 @@ async fn fetch_data_handler(
             StatusCode::OK,
             html!(
                 h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date) }
-                    a href={"/?date=" (input_date - chrono::Duration::days(1))} { "Previous day" }
+
+                (link("/optimizer", "Optimalizer"))
+
+                div .flex .flex-row .justify-center .gap-2 {
+                    (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "Previous day"))
                     " | "
-                    a href="/" { "today (" (today) ")" }
+                    (link("/", format!("today ({})", today).as_str()))
                     " | "
-                    a href={"/?date=" (input_date + chrono::Duration::days(1))} { "Next day" }
+                    (link(format!("/?date={}", input_date + chrono::Duration::days(1)).as_str(), "Next day"))
+                }
+
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == active_hour { "var(--color-green-500)" } else { "var(--color-blue-500)" } })) }
+                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == active_hour { "fill-green-600" } else { "fill-blue-600" } })) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
                 div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }
@@ -90,7 +96,7 @@ struct OptimalizerQuery {
     exp: Option<String>,
 }
 
-async fn get_builder_handler(
+async fn route_get_optimizer(
     State(state): State<Arc<state::AppState>>,
     query: Query<OptimalizerQuery>,
 ) -> impl IntoResponse {
@@ -109,14 +115,16 @@ async fn get_builder_handler(
 
     const DOMAIN: &str = "https://ota.kalita.cz";
     let automation_url = format!(
-        "{DOMAIN}/automation?exp={}",
+        "{DOMAIN}/opt?exp={}",
         query.exp.clone().unwrap_or("".into())
     );
 
-    let examples = [r#"/builder?exp=[{"price":120},{"hours":[0,10]}]"#];
+    let examples = [r#"/optimizer?exp=[{"price":120},{"hours":[0,10]}]"#];
 
     let content = html!(
         h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
+
+        (link("/", "Homepage"))
 
         div .text-left {
             h2 .text-2xl.font-semibold.mb-4 { "Condition" }
@@ -134,7 +142,7 @@ async fn get_builder_handler(
             h2 .text-2xl.font-semibold.mb-4 { "Examples" }
             ul {
                 @for example in examples.iter() {
-                    li { a .underline ."hover:text-red-400" href=(example) { (example) } }
+                    li { (link(example, example)) }
                 }
             }
         }
@@ -143,7 +151,7 @@ async fn get_builder_handler(
     Ok(render_layout(content))
 }
 
-async fn get_automation_handler(
+async fn route_get_opt(
     State(state): State<Arc<state::AppState>>,
     query: Query<OptimalizerQuery>,
 ) -> impl IntoResponse {

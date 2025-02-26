@@ -41,7 +41,7 @@ impl ChartSettings {
         &self,
         prices: &[f32],
         labels: Option<&[&str]>,
-        colors: impl for<'a> Fn(&'a (usize, f32)) -> &'a str,
+        color: impl for<'a> Fn(&'a (usize, f32)) -> &'a str,
     ) -> Markup {
         let cheapiest_hour = PriceStats::cheapest_hour(&prices);
         let expensive_hour = PriceStats::expensive_hour(&prices);
@@ -63,7 +63,7 @@ impl ChartSettings {
                     @for (hour, &price) in prices.iter().enumerate() {
                         rect x=(hour * (self.bar_width + self.bar_spacing)) y=(zero_offset - (price * scale))
                             width=(self.bar_width) height=(1.0_f32.max(price * scale))
-                            fill=(colors(&(hour, price))) {}
+                            class=(color(&(hour, price))) {}
                         text x=(hour * (self.bar_width + self.bar_spacing) + self.bar_width / 2) y=(zero_offset - (price * scale) - 3.0) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
                             (format!("{price:.0}"))
                         }
@@ -92,9 +92,9 @@ impl Condition {
         let chart = ChartSettings::default();
         chart.render(&ctx.prices.prices, Some(&labels), |(index, _price)| {
             if results[*index] {
-                "var(--color-green-500)"
+                "fill-green-600"
             } else {
-                "var(--color-red-500)"
+                "fill-red-600"
             }
         })
     }
@@ -106,6 +106,12 @@ fn format_price(price: f32) -> Markup {
         span .text-neutral-500 .text-sm {
             "."(format!("{:02.0}", (price - price.floor()) * 100.0 ))
         }
+    }
+}
+
+pub fn link(url: &str, text: &str) -> Markup {
+    html! {
+        a href=(url) a .underline ."hover:text-red-400" { (text) }
     }
 }
 
