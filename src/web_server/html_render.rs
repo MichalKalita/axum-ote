@@ -2,7 +2,7 @@ use maud::{html, Markup};
 
 use crate::web_server::state::{Distribution, PriceStats};
 
-use super::conditions::{Condition, Eval, EvaluateContext};
+use super::conditions::{CheapCondition, Condition, Eval, EvaluateContext};
 
 pub fn render_layout(content: Markup) -> Markup {
     html! {
@@ -203,7 +203,7 @@ impl RenderHtml for Condition {
                     "Hours: " (from) " - " (to)
                 }
             },
-            Condition::Cheap { hours, from, to } => html! {
+            Condition::Cheap(CheapCondition { hours, from, to }) => html! {
                 div .ml-4 {
                     "Cheap: " (hours) " cheapiest hours in hours " (from) " - " (to)
                 }

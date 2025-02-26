@@ -10,11 +10,7 @@ pub enum Condition {
 
     Price(f32),
     Hours(u32, u32),
-    Cheap {
-        hours: u8,
-        from: u8,
-        to: u8,
-    },
+    Cheap(CheapCondition),
 
     #[cfg(test)]
     Debug(bool),
@@ -22,43 +18,6 @@ pub enum Condition {
 
 pub trait Eval {
     fn evaluate(&self, ctx: &EvaluateContext) -> bool;
-    fn evaluate_all(&self, ctx: &EvaluateContext) -> Vec<bool>;
-}
-
-impl Eval for Condition {
-    fn evaluate(&self, ctx: &EvaluateContext) -> bool {
-        match self {
-            Condition::And(items) if items.len() > 0 => items.iter().all(|i| i.evaluate(ctx)),
-            Condition::Or(items) if items.len() > 0 => items.iter().any(|i| i.evaluate(ctx)),
-            Condition::And(_) | Condition::Or(_) => false,
-
-            Condition::Not(item) => !item.evaluate(ctx),
-            Condition::Price(price) => ctx.prices.prices[ctx.prices.now_index] <= *price,
-            Condition::Hours(min, max) => {
-                let hour = ctx.now.hour();
-
-                *min <= hour && hour <= *max
-            }
-            Condition::Cheap { hours, from, to } => {
-                let prices = ctx.slice(*from as usize, *to as usize);
-
-                if let Some(mut prices) = prices {
-                    prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                    let actual_price = ctx.actual_price();
-                    let actual_price_position = prices
-                        .iter()
-                        .position(|price| actual_price < *price)
-                        .unwrap_or(prices.len());
-                    actual_price_position <= *hours as usize
-                } else {
-                    false
-                }
-            }
-
-            #[cfg(test)]
-            Condition::Debug(state) => *state,
-        }
-    }
 
     fn evaluate_all(&self, ctx: &EvaluateContext) -> Vec<bool> {
         let start_time = ctx
@@ -84,6 +43,28 @@ impl Eval for Condition {
                 self.evaluate(&updated_ctx)
             })
             .collect::<Vec<bool>>()
+    }
+}
+
+impl Eval for Condition {
+    fn evaluate(&self, ctx: &EvaluateContext) -> bool {
+        match self {
+            Condition::And(items) if items.len() > 0 => items.iter().all(|i| i.evaluate(ctx)),
+            Condition::Or(items) if items.len() > 0 => items.iter().any(|i| i.evaluate(ctx)),
+            Condition::And(_) | Condition::Or(_) => false,
+
+            Condition::Not(item) => !item.evaluate(ctx),
+            Condition::Price(price) => ctx.prices.prices[ctx.prices.now_index] <= *price,
+            Condition::Hours(min, max) => {
+                let hour = ctx.now.hour();
+
+                *min <= hour && hour <= *max
+            }
+            Condition::Cheap(cheap_condition) => cheap_condition.evaluate(ctx),
+
+            #[cfg(test)]
+            Condition::Debug(state) => *state,
+        }
     }
 }
 
@@ -163,152 +144,6 @@ mod condition_tests {
                 false, false, false, false, false, false, false, false, false, false, false, false
             ]
         );
-    }
-
-    mod cheap_tests {
-        use chrono::NaiveDateTime;
-
-        use crate::web_server::conditions::{
-            condition_tests::setup, Condition, Eval, EvaluateContext,
-        };
-
-        #[test]
-        fn test_cheap_today() {
-            // Actual hours is 2:00 - 2:59
-            let ctx = setup();
-
-            // Single price, always true
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 1,
-                    from: 2,
-                    to: 3,
-                }
-                .evaluate(&ctx),
-                true
-            );
-
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 1,
-                    from: 2,
-                    to: 3,
-                }
-                .evaluate(&ctx),
-                true
-            );
-
-            // Out of range
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 24,
-                    from: 3,
-                    to: 24,
-                }
-                .evaluate(&ctx),
-                false
-            );
-
-            // Real usage
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 3,
-                    from: 0,
-                    to: 3,
-                }
-                .evaluate(&ctx),
-                true
-            );
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 2,
-                    from: 0,
-                    to: 3,
-                }
-                .evaluate(&ctx),
-                false
-            );
-        }
-
-        #[test]
-        fn test_cheap_yesterday_today() {
-            let mut ctx = EvaluateContext::new(
-                NaiveDateTime::parse_from_str("2025-02-16 09:43:44", "%Y-%m-%d %H:%M:%S").unwrap(),
-                vec![
-                    // yesterday 0-12
-                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-                    // yesterday 12-24
-                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-                    // today 0-12
-                    9.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-                    // today 12-24
-                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0,
-                ],
-                24,
-            );
-
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 1,
-                    from: 23,
-                    to: 1,
-                }
-                .evaluate(&ctx),
-                true
-            );
-
-            ctx.prices.prices[23] = 8.0;
-
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 1,
-                    from: 23,
-                    to: 1,
-                }
-                .evaluate(&ctx),
-                false
-            );
-        }
-
-        #[test]
-        fn test_cheap_today_tomorrow() {
-            let mut ctx = EvaluateContext::new(
-                NaiveDateTime::parse_from_str("2025-02-16 09:43:44", "%Y-%m-%d %H:%M:%S").unwrap(),
-                vec![
-                    // today 0-12
-                    1.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-                    // today 12-24
-                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 9.0,
-                    // tomorrow 0-12
-                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-                    // tomorrow 12-24
-                    10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
-                ],
-                23,
-            );
-
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 1,
-                    from: 23,
-                    to: 1,
-                }
-                .evaluate(&ctx),
-                true
-            );
-
-            ctx.prices.prices[24] = 8.0;
-
-            assert_eq!(
-                Condition::Cheap {
-                    hours: 1,
-                    from: 23,
-                    to: 1,
-                }
-                .evaluate(&ctx),
-                false
-            );
-        }
     }
 
     #[test]
@@ -393,6 +228,184 @@ mod condition_tests {
         );
         assert_eq!(
             Condition::Or(vec![Condition::Debug(false), Condition::Debug(false)]).evaluate(&ctx),
+            false
+        );
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct CheapCondition {
+    pub hours: u8,
+    pub from: u8,
+    pub to: u8,
+}
+
+impl Eval for CheapCondition {
+    fn evaluate(&self, ctx: &EvaluateContext) -> bool {
+        let prices = ctx.slice(self.from as usize, self.to as usize);
+
+        if let Some(mut prices) = prices {
+            prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let actual_price = ctx.actual_price();
+            let actual_price_position = prices
+                .iter()
+                .position(|price| actual_price < *price)
+                .unwrap_or(prices.len());
+            actual_price_position <= self.hours as usize
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod cheap_tests {
+    use chrono::NaiveDateTime;
+
+    use crate::web_server::conditions::{CheapCondition, Eval, EvaluateContext};
+
+    fn setup() -> EvaluateContext {
+        EvaluateContext::new(
+            NaiveDateTime::parse_from_str("2020-01-01 02:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            (0..24).map(|i| i as f32).collect(),
+            2, // 2:00 - 2:59
+        )
+    }
+
+    #[test]
+    fn test_cheap_today() {
+        // Actual hours is 2:00 - 2:59
+        let ctx = setup();
+
+        // Single price, always true
+        assert_eq!(
+            CheapCondition {
+                hours: 1,
+                from: 2,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            true
+        );
+
+        assert_eq!(
+            CheapCondition {
+                hours: 1,
+                from: 2,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            true
+        );
+
+        // Out of range
+        assert_eq!(
+            CheapCondition {
+                hours: 24,
+                from: 3,
+                to: 24,
+            }
+            .evaluate(&ctx),
+            false
+        );
+
+        // Real usage
+        assert_eq!(
+            CheapCondition {
+                hours: 3,
+                from: 0,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            true
+        );
+        assert_eq!(
+            CheapCondition {
+                hours: 2,
+                from: 0,
+                to: 3,
+            }
+            .evaluate(&ctx),
+            false
+        );
+    }
+
+    #[test]
+    fn test_cheap_yesterday_today() {
+        let mut ctx = EvaluateContext::new(
+            NaiveDateTime::parse_from_str("2025-02-16 09:43:44", "%Y-%m-%d %H:%M:%S").unwrap(),
+            vec![
+                // yesterday 0-12
+                10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                // yesterday 12-24
+                10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                // today 0-12
+                9.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                // today 12-24
+                10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0,
+            ],
+            24,
+        );
+
+        assert_eq!(
+            CheapCondition {
+                hours: 1,
+                from: 23,
+                to: 1,
+            }
+            .evaluate(&ctx),
+            true
+        );
+
+        ctx.prices.prices[23] = 8.0;
+
+        assert_eq!(
+            CheapCondition {
+                hours: 1,
+                from: 23,
+                to: 1,
+            }
+            .evaluate(&ctx),
+            false
+        );
+    }
+
+    #[test]
+    fn test_cheap_today_tomorrow() {
+        let mut ctx = EvaluateContext::new(
+            NaiveDateTime::parse_from_str("2025-02-16 09:43:44", "%Y-%m-%d %H:%M:%S").unwrap(),
+            vec![
+                // today 0-12
+                1.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                // today 12-24
+                10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 9.0,
+                // tomorrow 0-12
+                10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+                // tomorrow 12-24
+                10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+            ],
+            23,
+        );
+
+        assert_eq!(
+            CheapCondition {
+                hours: 1,
+                from: 23,
+                to: 1,
+            }
+            .evaluate(&ctx),
+            true
+        );
+
+        ctx.prices.prices[24] = 8.0;
+
+        assert_eq!(
+            CheapCondition {
+                hours: 1,
+                from: 23,
+                to: 1,
+            }
+            .evaluate(&ctx),
             false
         );
     }

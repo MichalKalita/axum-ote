@@ -68,7 +68,7 @@ async fn route_get_root(
             html!(
                 h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date) }
 
-                (link("/optimizer", "Optimalizer"))
+                (link("/optimizer", "Optimizer"))
 
                 div .flex .flex-row .justify-center .gap-2 {
                     (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "Previous day"))
@@ -122,7 +122,7 @@ async fn route_get_optimizer(
     let examples = [r#"/optimizer?exp=[{"price":120},{"hours":[0,10]}]"#];
 
     let content = html!(
-        h1 .text-4xl.font-bold.mb-8 { "Optimalizer, find cheapist hours" }
+        h1 .text-4xl.font-bold.mb-8 { "Optimizer, find cheapist hours" }
 
         (link("/", "Homepage"))
 
