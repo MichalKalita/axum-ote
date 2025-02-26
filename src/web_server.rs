@@ -10,7 +10,7 @@ use axum::{
 };
 use chrono::{NaiveDate, Timelike, Utc};
 use chrono_tz::Europe::Prague;
-use conditions::{Condition, Eval};
+use conditions::{CheapCondition, Condition, Eval};
 use maud::html;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -94,18 +94,34 @@ async fn route_get_root(
 #[derive(Deserialize)]
 struct OptimalizerQuery {
     exp: Option<String>,
+    hours: Option<u8>,
+    from: Option<u8>,
+    to: Option<u8>,
 }
 
 async fn route_get_optimizer(
     State(state): State<Arc<state::AppState>>,
-    query: Query<OptimalizerQuery>,
+    Query(query): Query<OptimalizerQuery>,
 ) -> impl IntoResponse {
+    let cheap_condition = match query {
+        OptimalizerQuery {
+            hours: Some(hours),
+            from: Some(from),
+            to: Some(to),
+            ..
+        } => Some(CheapCondition { hours, from, to }),
+        _ => None,
+    };
+
     let condition = query.exp.as_ref().map(|exp| Condition::try_from(exp));
 
     let condition = match condition {
         Some(Ok(data)) => data,
         Some(Err(err)) => return Err(format!("Error parsing expression: {}", err)),
-        None => Condition::And(vec![]),
+        None => match cheap_condition {
+            Some(ref cheap_condition) => Condition::Cheap(cheap_condition.clone()),
+            None => Condition::And(vec![]),
+        },
     };
 
     let exp_context = match state.expression_context().await {
@@ -128,6 +144,9 @@ async fn route_get_optimizer(
 
         div .text-left {
             h2 .text-2xl.font-semibold.mb-4 { "Condition" }
+
+            (cheap_condition.render_html())
+
             (&condition.render_html())
 
             h2 .text-2xl.font-semibold.mb-4 { "Evaluation" }

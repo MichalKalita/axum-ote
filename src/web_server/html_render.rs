@@ -214,3 +214,25 @@ impl RenderHtml for Condition {
         }
     }
 }
+
+impl RenderHtml for Option<CheapCondition> {
+    fn render_html(&self) -> Markup {
+        let actual = self.as_ref().unwrap_or_else(|| &CheapCondition {
+            hours: 1,
+            from: 0,
+            to: 24,
+        });
+
+        html! {
+            form method="GET" class="flex space-x-2 items-center" {
+                label for="cheap_hours" { "Cheap Hours:" }
+                input type="number" id="cheap_hours" name="hours" value=(actual.hours) min="1" max="24" step="1" class="w-16 p-1 border rounded" {}
+                label for="cheap_from" { "From:" }
+                input type="number" id="cheap_from" name="from" value=(actual.from) min="0" max="23" step="1" class="w-16 p-1 border rounded" {}
+                label for="cheap_to" { "To:" }
+                input type="number" id="cheap_to" name="to" value=(actual.to) min="1" max="24" step="1" class="w-16 p-1 border rounded" {}
+                button type="submit" class="px-4 py-1 bg-blue-500 text-white rounded cursor-pointer" { "Update" }
+            }
+        }
+    }
+}
