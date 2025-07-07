@@ -54,11 +54,11 @@ impl ChartSettings {
             self.height / expensive_hour.1
         };
 
-        let zero_offset = (if *cheapiest_hour.1 < 0.0 {
-            self.height - (cheapiest_hour.1 * scale)
+        let zero_offset = if *cheapiest_hour.1 < 0.0 {
+            15.0 + (expensive_hour.1 * scale)
         } else {
-            self.height
-        }) + 15.0;
+            self.height + 15.0
+        };
 
         ChartMetrics {
             scale,
@@ -73,11 +73,15 @@ impl ChartSettings {
     }
 
     fn calculate_bar_y(&self, price: f32, metrics: &ChartMetrics) -> f32 {
-        metrics.zero_offset - (price * metrics.scale)
+        if price >= 0.0 {
+            metrics.zero_offset - (price * metrics.scale)
+        } else {
+            metrics.zero_offset
+        }
     }
 
     fn calculate_bar_height(&self, price: f32, metrics: &ChartMetrics) -> f32 {
-        1.0_f32.max(price * metrics.scale)
+        1.0_f32.max(price.abs() * metrics.scale)
     }
 
     fn calculate_text_x(&self, hour: usize) -> usize {
@@ -277,5 +281,33 @@ impl RenderHtml for Option<CheapCondition> {
                 button type="submit" class="px-4 py-1 bg-blue-500 text-white rounded cursor-pointer" { "Update" }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod chart_settings_tests {
+    use super::*;
+
+    #[test]
+    fn test_chart_settings_with_prices_negative_zero_positive() {
+        let settings = ChartSettings::default();
+        let prices = vec![-10.0, 0.0, 10.0];
+        let metrics = settings.calculate_metrics(&prices);
+
+        // Verify scale calculation
+        assert_eq!(metrics.scale, 15.0); // 300.0 / 20.0
+
+        // Verify zero offset
+        assert_eq!(metrics.zero_offset, 165.0); // 15.0 + (10.0 * 15.0)
+
+        // Verify bar heights
+        assert_eq!(settings.calculate_bar_height(-10.0, &metrics), 150.0); // same height as +10.0
+        assert_eq!(settings.calculate_bar_height(0.0, &metrics), 1.0); // min height for zero
+        assert_eq!(settings.calculate_bar_height(10.0, &metrics), 150.0); // 10.0 * 15.0
+
+        // Verify bar Y positions
+        assert_eq!(settings.calculate_bar_y(-10.0, &metrics), 165.0); // at zero line for negative
+        assert_eq!(settings.calculate_bar_y(0.0, &metrics), 165.0); // at zero line for zero
+        assert_eq!(settings.calculate_bar_y(10.0, &metrics), 15.0); // above zero line for positive
     }
 }
