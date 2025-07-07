@@ -8,6 +8,8 @@ pub fn render_layout(content: Markup) -> Markup {
     html! {
         html {
             head {
+                meta charset="utf-8" {}
+                meta name="viewport" content="width=device-width, initial-scale=1" {}
                 title { "OTE CR Price Checker" }
                 script src="https://unpkg.com/@tailwindcss/browser@4" {}
                 script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" {}
@@ -105,7 +107,7 @@ impl ChartSettings {
         let metrics = self.calculate_metrics(prices);
 
         html! {
-            svg width=(metrics.svg_width) height=(metrics.svg_height) {
+            svg viewBox={"0 0 " (metrics.svg_width) " " (metrics.svg_height)} style={"max-width:" (metrics.svg_width) "px"} {
                 g {
                     @for (hour, &price) in prices.iter().enumerate() {
                         rect x=(self.calculate_bar_x(hour)) y=(self.calculate_bar_y(price, &metrics))
