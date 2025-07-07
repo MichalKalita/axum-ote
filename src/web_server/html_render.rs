@@ -36,13 +36,15 @@ impl Default for ChartSettings {
     }
 }
 
+struct ChartMetrics {
+    scale: f32,
+    zero_offset: f32,
+    svg_width: usize,
+    svg_height: f32,
+}
+
 impl ChartSettings {
-    pub fn render(
-        &self,
-        prices: &[f32],
-        labels: Option<&[&str]>,
-        color: impl for<'a> Fn(&'a (usize, f32)) -> &'a str,
-    ) -> Markup {
+    fn calculate_metrics(&self, prices: &[f32]) -> ChartMetrics {
         let cheapiest_hour = PriceStats::cheapest_hour(&prices);
         let expensive_hour = PriceStats::expensive_hour(&prices);
 
@@ -51,25 +53,66 @@ impl ChartSettings {
         } else {
             self.height / expensive_hour.1
         };
+
         let zero_offset = (if *cheapiest_hour.1 < 0.0 {
             self.height - (cheapiest_hour.1 * scale)
         } else {
             self.height
         }) + 15.0;
 
+        ChartMetrics {
+            scale,
+            zero_offset,
+            svg_width: prices.len() * (self.bar_width + self.bar_spacing),
+            svg_height: self.height + 30.0,
+        }
+    }
+
+    fn calculate_bar_x(&self, hour: usize) -> usize {
+        hour * (self.bar_width + self.bar_spacing)
+    }
+
+    fn calculate_bar_y(&self, price: f32, metrics: &ChartMetrics) -> f32 {
+        metrics.zero_offset - (price * metrics.scale)
+    }
+
+    fn calculate_bar_height(&self, price: f32, metrics: &ChartMetrics) -> f32 {
+        1.0_f32.max(price * metrics.scale)
+    }
+
+    fn calculate_text_x(&self, hour: usize) -> usize {
+        hour * (self.bar_width + self.bar_spacing) + self.bar_width / 2
+    }
+
+    fn calculate_price_text_y(&self, price: f32, metrics: &ChartMetrics) -> f32 {
+        metrics.zero_offset - (price * metrics.scale) - 3.0
+    }
+
+    fn calculate_label_text_y(&self, metrics: &ChartMetrics) -> f32 {
+        metrics.zero_offset - 10.0
+    }
+
+    pub fn render(
+        &self,
+        prices: &[f32],
+        labels: Option<&[&str]>,
+        color: impl for<'a> Fn(&'a (usize, f32)) -> &'a str,
+    ) -> Markup {
+        let metrics = self.calculate_metrics(prices);
+
         html! {
-            svg width=(prices.len() * (self.bar_width + self.bar_spacing)) height=(self.height + 30.0) {
+            svg width=(metrics.svg_width) height=(metrics.svg_height) {
                 g {
                     @for (hour, &price) in prices.iter().enumerate() {
-                        rect x=(hour * (self.bar_width + self.bar_spacing)) y=(zero_offset - (price * scale))
-                            width=(self.bar_width) height=(1.0_f32.max(price * scale))
+                        rect x=(self.calculate_bar_x(hour)) y=(self.calculate_bar_y(price, &metrics))
+                            width=(self.bar_width) height=(self.calculate_bar_height(price, &metrics))
                             class=(color(&(hour, price))) {}
-                        text x=(hour * (self.bar_width + self.bar_spacing) + self.bar_width / 2) y=(zero_offset - (price * scale) - 3.0) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
+                        text x=(self.calculate_text_x(hour)) y=(self.calculate_price_text_y(price, &metrics)) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
                             (format!("{price:.0}"))
                         }
 
                         @if let Some(labels) = labels {
-                            text x=(hour * (self.bar_width + self.bar_spacing) + self.bar_width / 2) y=(zero_offset - 10.0) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-100" {
+                            text x=(self.calculate_text_x(hour)) y=(self.calculate_label_text_y(&metrics)) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-100" {
                                 (labels[hour])
                             }
                         }
