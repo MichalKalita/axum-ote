@@ -40,7 +40,7 @@ pub(crate) enum FetchError {
     InvalidDataSize,
 }
 
-pub async fn fetch_data(date: NaiveDate) -> Result<[f32; 24], FetchError> {
+pub async fn fetch_data(date: NaiveDate) -> Result<Vec<f32>, FetchError> {
     let url = format!("https://www.ote-cr.cz/en/short-term-markets/electricity/day-ahead-market/@@chart-data?report_date={}", date);
     info!("Fetching data for date {}", date);
 
@@ -78,21 +78,15 @@ pub async fn fetch_data(date: NaiveDate) -> Result<[f32; 24], FetchError> {
             .data
             .data_line
             .iter()
-            .find(|line| line.title == "Price (EUR/MWh)")
+            .find(|line| line.title == "15min price (EUR/MWh)")
         {
             // Check if the number of points is exactly 24
-            if price_data.point.len() != 24 {
-                error!("Price data does not contain exactly 24 points.");
+            if price_data.point.len() != 96 {
+                error!("Price data does not contain exactly 96 points.");
                 return Err(FetchError::InvalidDataSize);
             }
 
-            let mut prices = [0.0; 24];
-            for (i, point) in price_data.point.iter().enumerate() {
-                if i < 24 {
-                    prices[i] = point.y;
-                }
-            }
-            Ok(prices)
+            Ok(price_data.point.iter().map(|point| point.y).collect())
         } else {
             error!("Price data not found in the response.");
             Err(FetchError::PriceDataNotFound)

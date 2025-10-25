@@ -119,7 +119,7 @@ impl ChartSettings {
 
                         @if let Some(labels) = labels {
                             text x=(self.calculate_text_x(hour)) y=(self.calculate_label_text_y(&metrics)) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-100" {
-                                (labels[hour])
+                                (labels[hour / 4])
                             }
                         }
                     }
@@ -191,9 +191,15 @@ impl crate::web_server::state::DayPrices {
                     {
 
                         td .text-right .font-mono .pr-10 {
-                            (hour)
-                            span .text-neutral-500 .text-sm {
-                                " : 00 - 59"
+                            @if hour % 4 == 0 {
+                                (hour / 4)
+                                span .text-neutral-500 .text-sm {
+                                    " : " (format!("{:02}", hour % 4 * 15))
+                                }
+                            } @else {
+                                span .text-neutral-500 .text-sm {
+                                    (format!("{:02}", hour % 4 * 15))
+                                }
                             }
                         }
                         td .text-right .text-green-700[price<0.0] .font-mono .pr-10 {

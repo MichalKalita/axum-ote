@@ -11,7 +11,7 @@ use super::conditions::EvaluateContext;
 
 #[derive(Serialize, Clone)]
 pub struct DayPrices {
-    pub prices: [f32; 24],
+    pub prices: Vec<f32>,
     // pub date: chrono::NaiveDate,
 }
 
@@ -37,10 +37,10 @@ impl<'a> PriceStats for &'a [f32] {
 }
 
 impl DayPrices {
-    pub fn total_prices(&self, dist: &Distribution) -> [f32; 24] {
+    pub fn total_prices(&self, dist: &Distribution) -> Vec<f32> {
         let mut prices = self.prices.clone();
         for (i, price) in prices.iter_mut().enumerate() {
-            if dist.high_hours.contains(&(i as u8)) {
+            if dist.high_hours.contains(&(i as u8 / 4)) {
                 *price += dist.high_price;
             } else {
                 *price += dist.low_price;
@@ -89,7 +89,7 @@ impl AppState {
         if !self.days.contains_key(date) {
             match fetch_data(*date).await {
                 Ok(prices) => {
-                    self.days.insert(*date, DayPrices { prices });
+                    self.days.insert(*date, DayPrices { prices: prices.clone() });
 
                     return Some(DayPrices { prices });
                 }
