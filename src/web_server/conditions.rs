@@ -83,12 +83,7 @@ impl TryFrom<Condition> for String {
     fn try_from(value: Condition) -> Result<Self, Self::Error> {
         let items = match value {
             Condition::And(items) => items,
-            _ => {
-                return Err(json5::Error::Message {
-                    msg: "Other than And is not supported".to_string(),
-                    location: None,
-                })
-            }
+            _ => todo!("Other than And is not supported"),
         };
         json5::to_string(&items)
     }

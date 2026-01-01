@@ -54,8 +54,9 @@ async fn route_get_root(
     let input_date = query.date.unwrap_or(today);
 
     let hour = now.time().hour() as usize;
-    let active_hour = if input_date == today {
-        hour
+    let minute = (now.time().minute() / 15) as usize;
+    let actual_index = if input_date == today {
+        hour * 4 + minute
     } else {
         usize::MAX
     };
@@ -66,7 +67,7 @@ async fn route_get_root(
         Some(prices) => (
             StatusCode::OK,
             html!(
-                h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date) }
+                h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
 
                 (link("/optimizer", "Optimizer"))
 
@@ -79,7 +80,7 @@ async fn route_get_root(
                 }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == active_hour { "fill-green-600" } else { "fill-blue-600" } })) }
+                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == actual_index { "fill-green-600" } else { "fill-blue-600" } })) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
                 div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }
