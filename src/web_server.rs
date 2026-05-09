@@ -15,6 +15,7 @@ use conditions::{CheapCondition, Condition, Eval};
 use maud::html;
 use reqwest::StatusCode;
 use serde::Deserialize;
+use tower_http::compression::CompressionLayer;
 
 use std::sync::Arc;
 
@@ -26,6 +27,7 @@ fn create_app(state: state::AppState) -> Router {
         .route("/", get(route_get_root))
         .route("/optimizer", get(route_get_optimizer))
         .route("/opt", get(route_get_opt))
+        .layer(CompressionLayer::new())
         .with_state(Arc::new(state))
 }
 

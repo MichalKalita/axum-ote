@@ -19,6 +19,7 @@ env_logger = "*"
 dashmap = "*"
 json5 = "*"
 chrono-tz = "*"
+tower-http = { version = "*", features = ["compression-br", "compression-gzip"] }
 
 [profile.release]
 strip = true
