@@ -71,19 +71,23 @@ async fn route_get_root(
 
                 (link("/optimizer", "Optimizer"))
 
-                div .flex .flex-row .justify-center .gap-2 {
-                    (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "Previous day"))
+                    div .flex .flex-row .justify-center .gap-2 {
+                    (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "◀"))
+                    span .font-bold { (input_date) }
+                    (link(format!("/?date={}", input_date + chrono::Duration::days(1)).as_str(), "▶"))
                     " | "
-                    (link("/", format!("today ({})", today).as_str()))
-                    " | "
-                    (link(format!("/?date={}", input_date + chrono::Duration::days(1)).as_str(), "Next day"))
+                    @if input_date == today {
+                        span .font-bold .text-blue-600 .dark:text-blue-400 { "today" }
+                    } @else {
+                        (link("/", format!("today ({})", today).as_str()))
+                    }
                 }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Graph" }
                 div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == actual_index { "fill-green-600" } else { "fill-blue-600" } })) }
 
                 h2 .text-2xl.font-semibold.mb-4 { "Table" }
-                div .mb-4.flex.justify-center { (prices.render_table(&state.distribution)) }
+                div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index)) }
             ),
         ),
         None => (StatusCode::NOT_FOUND, html!(p { "Error fetching data." })),

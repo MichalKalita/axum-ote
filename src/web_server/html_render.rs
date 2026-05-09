@@ -165,7 +165,7 @@ pub fn link(url: &str, text: &str) -> Markup {
 }
 
 impl crate::web_server::state::DayPrices {
-    pub(crate) fn render_table(&self, dist: &Distribution) -> Markup {
+    pub(crate) fn render_table(&self, dist: &Distribution, actual_index: usize) -> Markup {
         let total_prices = self.total_prices(dist);
 
         let (_, &total_low) = PriceStats::cheapest_hour(&&(total_prices[..]));
@@ -188,6 +188,9 @@ impl crate::web_server::state::DayPrices {
                         ."dark:bg-green-900"[total_prices[hour] == total_low]
                         .bg-red-100[total_prices[hour] == total_high]
                         ."dark:bg-red-900"[total_prices[hour] == total_high]
+                        .font-bold[hour == actual_index]
+                        ."outline-2"[hour == actual_index]
+                        ."outline-blue-500"[hour == actual_index]
                     {
 
                         td .text-right .font-mono .pr-10 {
