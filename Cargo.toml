@@ -2,7 +2,7 @@
 name = "ote"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.90.0"
+rust-version = "1.95.0"
 
 [dependencies]
 axum = "*"
