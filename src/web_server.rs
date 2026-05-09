@@ -1,6 +1,7 @@
-mod conditions;
+pub(crate) mod conditions;
+mod css_gen;
 mod html_render;
-mod state;
+pub(crate) mod state;
 
 use axum::{
     extract::{Query, State},
@@ -18,7 +19,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use html_render::{link, render_layout, ChartSettings, RenderHtml};
-use state::PriceStats;
+use state::{Currency, PriceStats};
 
 fn create_app(state: state::AppState) -> Router {
     Router::new()
@@ -44,15 +45,17 @@ pub(crate) async fn start_web_server() {
 #[derive(Deserialize)]
 struct QueryParams {
     date: Option<NaiveDate>,
+    cur: Option<String>,
 }
 
 async fn route_get_root(
     State(state): State<Arc<state::AppState>>,
     query: Query<QueryParams>,
 ) -> impl IntoResponse {
-    let now = Utc::now().with_timezone(&Prague);
+let now = Utc::now().with_timezone(&Prague);
     let today = now.date_naive();
     let input_date = query.date.unwrap_or(today);
+    let currency: Currency = query.cur.as_deref().unwrap_or("eur").parse().unwrap_or(Currency::Eur);
 
     let hour = now.time().hour() as usize;
     let minute = (now.time().minute() / 15) as usize;
@@ -73,22 +76,27 @@ let (status, content) = match state.get_prices(&input_date).await {
             (
                 StatusCode::OK,
                 html!(
-                    h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
+h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
 
                     (link("/optimizer", "Optimizer"))
 
                         div .flex .flex-row .justify-center .gap-2 {
-                        (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "◀"))
+                        (link(format!("/?date={}&cur={}", input_date - chrono::Duration::days(1), currency).as_str(), "◀"))
                         span .font-bold { (input_date) }
-                        (link(format!("/?date={}", input_date + chrono::Duration::days(1)).as_str(), "▶"))
+                        (link(format!("/?date={}&cur={}", input_date + chrono::Duration::days(1), currency).as_str(), "▶"))
                         " | "
                         @if input_date == today {
                             span .font-bold .text-blue-600 .dark:text-blue-400 { "today" }
+} @else {
+                            (link(format!("/?cur={}", currency).as_str(), format!("today ({})", today).as_str()))
+                        }
+                        " | "
+                        @if matches!(currency, Currency::Eur) {
+                            (link(format!("/?date={}&cur=czk", input_date).as_str(), "CZK"))
                         } @else {
-                            (link("/", format!("today ({})", today).as_str()))
+                            (link(format!("/?date={}&cur=eur", input_date).as_str(), "EUR"))
                         }
                     }
-
                     h2 .text-2xl.font-semibold.mb-4 { "Graph" }
                     div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, price)| {
                         if *index == actual_index {
@@ -100,10 +108,10 @@ let (status, content) = match state.get_prices(&input_date).await {
 } else {
                             "fill-gray-500"
                         }
-                    })) }
+                    }, currency)) }
 
                     h2 .text-2xl.font-semibold.mb-4 { "Table" }
-                    div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index)) }
+                    div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index, currency)) }
                 ),
             )
         },

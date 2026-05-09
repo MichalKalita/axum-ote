@@ -1,4 +1,5 @@
 use core::f32;
+use std::str::FromStr;
 
 use crate::data_loader::fetch_data;
 use chrono::{Timelike, Utc};
@@ -12,7 +13,6 @@ use super::conditions::EvaluateContext;
 #[derive(Serialize, Clone)]
 pub struct DayPrices {
     pub prices: Vec<f32>,
-    // pub date: chrono::NaiveDate,
 }
 
 pub trait PriceStats {
@@ -146,6 +146,58 @@ impl AppState {
                 ))
             }
             _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Currency {
+    Eur,
+    Czk,
+}
+
+impl Currency {
+    pub const RATE: f32 = 24.30;
+
+    pub fn convert(self, price: f32) -> f32 {
+        match self {
+            Currency::Eur => price,
+            Currency::Czk => price * Self::RATE / 1000.0,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Currency::Eur => "Price EUR/MWh",
+            Currency::Czk => "Price CZK/kWh",
+        }
+    }
+
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Currency::Eur => "EUR/MWh",
+            Currency::Czk => "CZK/kWh",
+        }
+    }
+}
+
+impl FromStr for Currency {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "eur" => Ok(Currency::Eur),
+            "czk" => Ok(Currency::Czk),
+            _ => Err(format!("unknown currency: {s}")),
+        }
+    }
+}
+
+impl std::fmt::Display for Currency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Currency::Eur => write!(f, "eur"),
+            Currency::Czk => write!(f, "czk"),
         }
     }
 }

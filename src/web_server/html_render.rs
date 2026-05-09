@@ -1,22 +1,33 @@
-use maud::{html, Markup};
+use std::collections::HashSet;
 
-use crate::web_server::state::{Distribution, PriceStats};
+use maud::{html, Markup, PreEscaped};
+
+use crate::web_server::state::{Currency, Distribution, PriceStats};
 
 use super::conditions::{CheapCondition, Condition, Eval, EvaluateContext};
+use super::css_gen;
+
+const BODY_CLASSES: &str = "p-4 text-center dark:bg-gray-900 dark:text-gray-300";
 
 pub fn render_layout(content: Markup) -> Markup {
+    let body_html = content.into_string();
+    let mut classes = HashSet::new();
+    css_gen::extract_classes_from_html(&body_html, &mut classes);
+    css_gen::extract_classes_from_str(BODY_CLASSES, &mut classes);
+    let css = css_gen::generate_css(&classes);
+
     html! {
         html {
             head {
                 meta charset="utf-8" {}
                 meta name="viewport" content="width=device-width, initial-scale=1" {}
                 title { "OTE CR Price Checker" }
-                script src="https://unpkg.com/@tailwindcss/browser@4" {}
+                style { (PreEscaped(css)) }
                 script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" {}
                 script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" {}
             }
-            body .p-4.text-center."dark:bg-gray-900"."dark:text-gray-300" {
-                (content)
+            body class=(BODY_CLASSES) {
+                (PreEscaped(body_html))
             }
         }
     }
@@ -98,11 +109,12 @@ impl ChartSettings {
         metrics.zero_offset - 10.0
     }
 
-    pub fn render(
+pub fn render(
         &self,
         prices: &[f32],
         labels: Option<&[&str]>,
         color: impl for<'a> Fn(&'a (usize, f32)) -> &'a str,
+        currency: Currency,
     ) -> Markup {
         let metrics = self.calculate_metrics(prices);
 
@@ -114,7 +126,11 @@ impl ChartSettings {
                             width=(self.bar_width) height=(self.calculate_bar_height(price, &metrics))
                             class=(color(&(hour, price))) {}
                         text x=(self.calculate_text_x(hour)) y=(self.calculate_price_text_y(price, &metrics)) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
-                            (format!("{price:.0}"))
+@if matches!(currency, Currency::Czk) {
+                                (format!("{:.1}", currency.convert(price)))
+                            } @else {
+                                (format!("{:.0}", currency.convert(price)))
+                            }
                         }
 
                         @if let Some(labels) = labels {
@@ -145,11 +161,12 @@ impl Condition {
             } else {
                 "fill-red-600"
             }
-        })
+        }, Currency::Eur)
     }
 }
 
-fn format_price(price: f32) -> Markup {
+fn format_price(price: f32, currency: Currency) -> Markup {
+    let price = currency.convert(price);
     html! {
         (price.floor())
         span .text-neutral-500 .text-sm {
@@ -165,7 +182,7 @@ pub fn link(url: &str, text: &str) -> Markup {
 }
 
 impl crate::web_server::state::DayPrices {
-    pub(crate) fn render_table(&self, dist: &Distribution, actual_index: usize) -> Markup {
+    pub(crate) fn render_table(&self, dist: &Distribution, actual_index: usize, currency: Currency) -> Markup {
         let total_prices = self.total_prices(dist);
 
         let (_, &total_low) = PriceStats::cheapest_hour(&&(total_prices[..]));
@@ -175,7 +192,7 @@ impl crate::web_server::state::DayPrices {
             table {
                 tr {
                     th.pr-10 { "Hour" }
-                    th colspan="2" { "Price EUR/MWh" }
+                    th colspan="2" { (currency.label()) }
                 }
                 tr {
                     th.pr-10 { "" }
@@ -206,10 +223,10 @@ impl crate::web_server::state::DayPrices {
                             }
                         }
                         td .text-right .text-green-700[price<0.0] .font-mono .pr-10 {
-                            (format_price(price))
+                            (format_price(price, currency))
                         }
                         td .text-right .text-green-700[price<0.0] .font-mono {
-                            (format_price(total_prices[hour]))
+                            (format_price(total_prices[hour], currency))
                         }
                     }
                 }

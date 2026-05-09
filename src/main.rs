@@ -6,6 +6,7 @@ use chrono_tz::Europe::Prague;
 use clap::Parser;
 use data_loader::fetch_data;
 use std::error::Error;
+use web_server::state::Currency;
 
 #[derive(Parser)]
 #[clap(
@@ -17,6 +18,8 @@ use std::error::Error;
 struct Cli {
     #[clap(long)]
     web: bool,
+    #[clap(long)]
+    czk: bool,
 }
 
 #[tokio::main]
@@ -30,13 +33,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if args.web {
         web_server::start_web_server().await;
     } else {
-        print().await;
+        let currency = if args.czk { Currency::Czk } else { Currency::Eur };
+        print(currency).await;
     }
 
     Ok(())
 }
 
-async fn print() {
+async fn print(currency: Currency) {
     let today = Utc::now().with_timezone(&Prague).date_naive();
     match fetch_data(today).await {
         Ok(prices) => {
@@ -44,8 +48,10 @@ async fn print() {
             let min_price = prices.iter().cloned().fold(f32::INFINITY, f32::min);
             let max_price = prices.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
 
-            for (hour, &price) in prices.iter().enumerate() {
-                print!("{0:>2}:00 - {0:>2}:59\t{1:>7.2} EUR/MWh", hour, price);
+for (hour, &price) in prices.iter().enumerate() {
+                let display_price = currency.convert(price);
+                let unit = currency.short_label();
+                print!("{0:>2}:00 - {0:>2}:59\t{1:>7.4} {2}", hour, display_price, unit);
                 if price == min_price {
                     print!(" (min)");
                 }
