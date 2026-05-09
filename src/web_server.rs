@@ -18,6 +18,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use html_render::{link, render_layout, ChartSettings, RenderHtml};
+use state::PriceStats;
 
 fn create_app(state: state::AppState) -> Router {
     Router::new()
@@ -63,33 +64,49 @@ async fn route_get_root(
 
     let chart = ChartSettings::default();
 
-    let (status, content) = match state.get_prices(&input_date).await {
-        Some(prices) => (
-            StatusCode::OK,
-            html!(
-                h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
+let (status, content) = match state.get_prices(&input_date).await {
+        Some(prices) => {
+            let total_prices = prices.total_prices(&state.distribution);
+            let (cheapest_idx, _) = PriceStats::cheapest_hour(&&total_prices[..]);
+            let (expensive_idx, _) = PriceStats::expensive_hour(&&total_prices[..]);
 
-                (link("/optimizer", "Optimizer"))
+            (
+                StatusCode::OK,
+                html!(
+                    h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
 
-                    div .flex .flex-row .justify-center .gap-2 {
-                    (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "◀"))
-                    span .font-bold { (input_date) }
-                    (link(format!("/?date={}", input_date + chrono::Duration::days(1)).as_str(), "▶"))
-                    " | "
-                    @if input_date == today {
-                        span .font-bold .text-blue-600 .dark:text-blue-400 { "today" }
-                    } @else {
-                        (link("/", format!("today ({})", today).as_str()))
+                    (link("/optimizer", "Optimizer"))
+
+                        div .flex .flex-row .justify-center .gap-2 {
+                        (link(format!("/?date={}", input_date - chrono::Duration::days(1)).as_str(), "◀"))
+                        span .font-bold { (input_date) }
+                        (link(format!("/?date={}", input_date + chrono::Duration::days(1)).as_str(), "▶"))
+                        " | "
+                        @if input_date == today {
+                            span .font-bold .text-blue-600 .dark:text-blue-400 { "today" }
+                        } @else {
+                            (link("/", format!("today ({})", today).as_str()))
+                        }
                     }
-                }
 
-                h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, _price)| { if *index == actual_index { "fill-green-600" } else { "fill-blue-600" } })) }
+                    h2 .text-2xl.font-semibold.mb-4 { "Graph" }
+                    div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, price)| {
+                        if *index == actual_index {
+                            "fill-blue-600"
+                        } else if *index == cheapest_idx || *price < 0.0 {
+                            "fill-green-600"
+                        } else if *index == expensive_idx {
+                            "fill-red-600"
+} else {
+                            "fill-gray-500"
+                        }
+                    })) }
 
-                h2 .text-2xl.font-semibold.mb-4 { "Table" }
-                div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index)) }
-            ),
-        ),
+                    h2 .text-2xl.font-semibold.mb-4 { "Table" }
+                    div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index)) }
+                ),
+            )
+        },
         None => (StatusCode::NOT_FOUND, html!(p { "Error fetching data." })),
     };
 
