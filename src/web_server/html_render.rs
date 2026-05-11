@@ -23,6 +23,17 @@ pub fn render_layout(content: Markup) -> Markup {
                 meta name="viewport" content="width=device-width, initial-scale=1" {}
                 title { "OTE CR Price Checker" }
                 style { (PreEscaped(css)) }
+                style { (PreEscaped("\
+.hover-highlight{outline-width:2px;outline-style:solid;outline-color:#3b82f6;font-weight:700}\
+rect.hover-highlight{fill:#2563eb!important}\
+")) }
+                script { (PreEscaped("\
+document.addEventListener('mouseover',function(e){\
+var el=e.target.closest('[data-idx]');\
+document.querySelectorAll('.hover-highlight').forEach(function(h){h.classList.remove('hover-highlight')});\
+if(el){var idx=el.getAttribute('data-idx');\
+document.querySelectorAll('[data-idx=\"'+idx+'\"]').forEach(function(h){h.classList.add('hover-highlight')})}\
+})")) }
                 script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" {}
                 script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" {}
             }
@@ -124,7 +135,7 @@ pub fn render(
                     @for (hour, &price) in prices.iter().enumerate() {
                         rect x=(self.calculate_bar_x(hour)) y=(self.calculate_bar_y(price, &metrics))
                             width=(self.bar_width) height=(self.calculate_bar_height(price, &metrics))
-                            class=(color(&(hour, price))) {}
+                            class=(color(&(hour, price))) data-idx=(hour) {}
                         text x=(self.calculate_text_x(hour)) y=(self.calculate_price_text_y(price, &metrics)) text-anchor="middle" .font-mono.text-xs."dark:fill-gray-300" {
 @if matches!(currency, Currency::Czk) {
                                 (format!("{:.1}", currency.convert(price)))
@@ -218,6 +229,7 @@ impl crate::web_server::state::DayPrices {
                                 ."outline-blue-500"[idx == actual_index]
                                 .text-green-700[price<0.0]
                                 .px-4
+                                data-idx=(idx)
                             {
                                 (format_price(price, currency))
                             }
