@@ -166,13 +166,6 @@ impl Currency {
         }
     }
 
-    pub fn label(self) -> &'static str {
-        match self {
-            Currency::Eur => "Price EUR/MWh",
-            Currency::Czk => "Price CZK/kWh",
-        }
-    }
-
     pub fn short_label(self) -> &'static str {
         match self {
             Currency::Eur => "EUR/MWh",
