@@ -48,16 +48,23 @@ async fn print(currency: Currency) {
             let min_price = prices.iter().cloned().fold(f32::INFINITY, f32::min);
             let max_price = prices.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
 
-for (hour, &price) in prices.iter().enumerate() {
-                let display_price = currency.convert(price);
+            for hour in 0..24 {
+                let base = hour * 4;
+                let display_prices: Vec<f32> = prices[base..base + 4].iter().map(|p| currency.convert(*p)).collect();
                 let unit = currency.short_label();
-                print!("{0:>2}:00 - {0:>2}:59\t{1:>7.4} {2}", hour, display_price, unit);
-                if price == min_price {
-                    print!(" (min)");
+                print!("{:>2}:00", hour);
+                for (q, &dp) in display_prices.iter().enumerate() {
+                    let idx = base + q;
+                    let marker = if prices[idx] == min_price {
+                        " *"
+                    } else if prices[idx] == max_price {
+                        " **"
+                    } else {
+                        "  "
+                    };
+                    print!("   {:>8.4}{}", dp, marker);
                 }
-                if price == max_price {
-                    print!(" (max)");
-                }
+                print!("   {}", unit);
                 println!();
             }
         }

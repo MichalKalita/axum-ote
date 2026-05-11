@@ -48,6 +48,7 @@ pub(crate) async fn start_web_server() {
 struct QueryParams {
     date: Option<NaiveDate>,
     cur: Option<String>,
+    dist: Option<bool>,
 }
 
 async fn route_get_root(
@@ -58,6 +59,7 @@ let now = Utc::now().with_timezone(&Prague);
     let today = now.date_naive();
     let input_date = query.date.unwrap_or(today);
     let currency: Currency = query.cur.as_deref().unwrap_or("eur").parse().unwrap_or(Currency::Eur);
+    let include_dist = query.dist.unwrap_or(false);
 
     let hour = now.time().hour() as usize;
     let minute = (now.time().minute() / 15) as usize;
@@ -69,51 +71,63 @@ let now = Utc::now().with_timezone(&Prague);
 
     let chart = ChartSettings::default();
 
-let (status, content) = match state.get_prices(&input_date).await {
+    let (status, content) = match state.get_prices(&input_date).await {
         Some(prices) => {
             let total_prices = prices.total_prices(&state.distribution);
-            let (cheapest_idx, _) = PriceStats::cheapest_hour(&&total_prices[..]);
-            let (expensive_idx, _) = PriceStats::expensive_hour(&&total_prices[..]);
+            let display_prices: Vec<f32> = if include_dist {
+                total_prices.clone()
+            } else {
+                prices.prices.clone()
+            };
+            let (cheapest_idx, _) = PriceStats::cheapest_hour(&&display_prices[..]);
+            let (expensive_idx, _) = PriceStats::expensive_hour(&&display_prices[..]);
 
             (
                 StatusCode::OK,
                 html!(
-h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
+                    h1 .text-4xl.font-bold.mb-8 { "OTE prices " (input_date)}
 
                     (link("/optimizer", "Optimizer"))
 
-                        div .flex .flex-row .justify-center .gap-2 {
-                        (link(format!("/?date={}&cur={}", input_date - chrono::Duration::days(1), currency).as_str(), "◀"))
+                    div .flex .flex-row .justify-center .gap-2 {
+                        (link(format!("/?date={}&cur={}&dist={}", input_date - chrono::Duration::days(1), currency, include_dist).as_str(), "◀"))
                         span .font-bold { (input_date) }
-                        (link(format!("/?date={}&cur={}", input_date + chrono::Duration::days(1), currency).as_str(), "▶"))
+                        (link(format!("/?date={}&cur={}&dist={}", input_date + chrono::Duration::days(1), currency, include_dist).as_str(), "▶"))
                         " | "
                         @if input_date == today {
                             span .font-bold .text-blue-600 .dark:text-blue-400 { "today" }
-} @else {
-                            (link(format!("/?cur={}", currency).as_str(), format!("today ({})", today).as_str()))
+                        } @else {
+                            (link(format!("/?cur={}&dist={}", currency, include_dist).as_str(), format!("today ({})", today).as_str()))
                         }
                         " | "
                         @if matches!(currency, Currency::Eur) {
-                            (link(format!("/?date={}&cur=czk", input_date).as_str(), "CZK"))
+                            (link(format!("/?date={}&cur=czk&dist={}", input_date, include_dist).as_str(), "CZK"))
                         } @else {
-                            (link(format!("/?date={}&cur=eur", input_date).as_str(), "EUR"))
+                            (link(format!("/?date={}&cur=eur&dist={}", input_date, include_dist).as_str(), "EUR"))
+                        }
+                        " | "
+                        form method="GET" class="inline-flex items-center gap-1" {
+                            input type="hidden" name="date" value=(input_date) {}
+                            input type="hidden" name="cur" value=(currency) {}
+                            input type="checkbox" id="dist" name="dist" value="true" checked[include_dist] onchange="this.form.submit()" {}
+                            label for="dist" { "Include distribution" }
                         }
                     }
                     h2 .text-2xl.font-semibold.mb-4 { "Graph" }
-                    div .mb-4.flex.justify-center { (chart.render(&prices.prices, Some(&state.distribution.by_hours()), |(index, price)| {
+                    div .mb-4.flex.justify-center { (chart.render(&display_prices, Some(&state.distribution.by_hours()), |(index, price)| {
                         if *index == actual_index {
                             "fill-blue-600"
                         } else if *index == cheapest_idx || *price < 0.0 {
                             "fill-green-600"
                         } else if *index == expensive_idx {
                             "fill-red-600"
-} else {
+                        } else {
                             "fill-gray-500"
                         }
                     }, currency)) }
 
                     h2 .text-2xl.font-semibold.mb-4 { "Table" }
-                    div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index, currency)) }
+                    div .mb-4.flex.justify-center { (prices.render_table(&state.distribution, actual_index, currency, include_dist)) }
                 ),
             )
         },

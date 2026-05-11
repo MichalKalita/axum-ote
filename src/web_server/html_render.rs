@@ -182,51 +182,45 @@ pub fn link(url: &str, text: &str) -> Markup {
 }
 
 impl crate::web_server::state::DayPrices {
-    pub(crate) fn render_table(&self, dist: &Distribution, actual_index: usize, currency: Currency) -> Markup {
+    pub(crate) fn render_table(&self, dist: &Distribution, actual_index: usize, currency: Currency, include_dist: bool) -> Markup {
         let total_prices = self.total_prices(dist);
+        let display_prices: &[f32] = if include_dist { &total_prices[..] } else { &self.prices[..] };
 
-        let (_, &total_low) = PriceStats::cheapest_hour(&&(total_prices[..]));
-        let (_, &total_high) = PriceStats::expensive_hour(&&(total_prices[..]));
+        let (min_idx, &_min_val) = PriceStats::cheapest_hour(&&display_prices[..]);
+        let (max_idx, &_max_val) = PriceStats::expensive_hour(&&display_prices[..]);
 
         html! {
             table {
                 tr {
-                    th.pr-10 { "Hour" }
-                    th colspan="2" { (currency.label()) }
+                    th.px-4 { "Hour" }
+                    th.px-4 { ":00" }
+                    th.px-4 { ":15" }
+                    th.px-4 { ":30" }
+                    th.px-4 { ":45" }
                 }
-                tr {
-                    th.pr-10 { "" }
-                    th.pr-10 { "Market" }
-                    th { "With Distribution" }
-                }
-                @for (hour, &price) in self.prices.iter().enumerate() {
-                    tr
-                        ."bg-green-100"[total_prices[hour] == total_low]
-                        ."dark:bg-green-900"[total_prices[hour] == total_low]
-                        .bg-red-100[total_prices[hour] == total_high]
-                        ."dark:bg-red-900"[total_prices[hour] == total_high]
-                        .font-bold[hour == actual_index]
-                        ."outline-2"[hour == actual_index]
-                        ."outline-blue-500"[hour == actual_index]
-                    {
-
-                        td .text-right .font-mono .pr-10 {
-                            @if hour % 4 == 0 {
-                                (hour / 4)
-                                span .text-neutral-500 .text-sm {
-                                    " : " (format!("{:02}", hour % 4 * 15))
-                                }
-                            } @else {
-                                span .text-neutral-500 .text-sm {
-                                    (format!("{:02}", hour % 4 * 15))
-                                }
+                @for hour in 0..24 {
+                    tr {
+                        td .text-right .font-mono .px-4 {
+                            (hour)
+                            ":00"
+                        }
+                        @for q in 0..4 {
+                            @let idx = hour * 4 + q;
+                            @let price = display_prices[idx];
+                            td
+                                .text-right .font-mono
+                                ."bg-green-100"[idx == min_idx]
+                                ."dark:bg-green-900"[idx == min_idx]
+                                .bg-red-100[idx == max_idx]
+                                ."dark:bg-red-900"[idx == max_idx]
+                                .font-bold[idx == actual_index]
+                                ."outline-2"[idx == actual_index]
+                                ."outline-blue-500"[idx == actual_index]
+                                .text-green-700[price<0.0]
+                                .px-4
+                            {
+                                (format_price(price, currency))
                             }
-                        }
-                        td .text-right .text-green-700[price<0.0] .font-mono .pr-10 {
-                            (format_price(price, currency))
-                        }
-                        td .text-right .text-green-700[price<0.0] .font-mono {
-                            (format_price(total_prices[hour], currency))
                         }
                     }
                 }
