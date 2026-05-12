@@ -140,7 +140,7 @@ func (cs ChartSettings) Render(prices []float32, labels []string, color func(ind
 			fmtFloat(cs.calculatePriceTextY(price, metrics)),
 			html.EscapeString(priceStr),
 		)
-		if labels != nil {
+		if labels != nil && hour/4 < len(labels) {
 			fmt.Fprintf(&sb, `<text x="%d" y="%s" text-anchor="middle" class="font-mono text-xs dark:fill-gray-100">%s</text>`,
 				cs.calculateTextX(hour),
 				fmtFloat(cs.calculateLabelTextY(metrics)),
@@ -205,13 +205,18 @@ func (d *DayPrices) RenderTable(dist *Distribution, actualIndex int, currency Cu
 	maxIdx, _ := ExpensiveHour(displayPrices)
 
 	var sb strings.Builder
+	hours := (len(displayPrices) + 3) / 4
 	sb.WriteString("<table>")
 	sb.WriteString(`<tr><th class="px-4">Hour</th><th class="px-4">:00</th><th class="px-4">:15</th><th class="px-4">:30</th><th class="px-4">:45</th></tr>`)
-	for hour := 0; hour < 24; hour++ {
+	for hour := 0; hour < hours; hour++ {
 		sb.WriteString("<tr>")
 		fmt.Fprintf(&sb, `<td class="text-right font-mono px-4">%d:00</td>`, hour)
 		for q := 0; q < 4; q++ {
 			idx := hour*4 + q
+			if idx >= len(displayPrices) {
+				sb.WriteString(`<td></td>`)
+				continue
+			}
 			price := displayPrices[idx]
 			classes := []string{"text-right", "font-mono", "px-4"}
 			if idx == minIdx {

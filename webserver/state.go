@@ -2,12 +2,14 @@ package webserver
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/MichalKalita/ote/dataloader"
+	"github.com/MichalKalita/ote/storage"
 )
 
 type DayPrices struct {
@@ -82,16 +84,15 @@ func (d *Distribution) ByHours() [24]string {
 }
 
 type AppState struct {
-	mu           sync.RWMutex
-	days         map[string]DayPrices
+	db           *storage.DB
 	Distribution Distribution
 }
 
-const NextDayPricesHour = 13
+const NextDayPricesHour = 14
 
-func NewAppState() *AppState {
+func NewAppState(db *storage.DB) *AppState {
 	return &AppState{
-		days: make(map[string]DayPrices),
+		db: db,
 		Distribution: Distribution{
 			HighHours: []byte{10, 12, 14, 17},
 			HighPrice: 648.0 / 25.29,
@@ -100,78 +101,84 @@ func NewAppState() *AppState {
 	}
 }
 
-func dateKey(date time.Time) string {
-	return date.Format("2006-01-02")
-}
-
-// GetPrices returns cached prices for the date, or fetches them.
+// GetPrices returns prices for the date. Reads from the DB; if absent, fetches
+// from OTE and persists. Returns (nil, false) on fetch error.
 func (s *AppState) GetPrices(date time.Time) (*DayPrices, bool) {
-	key := dateKey(date)
+	pragueDate := s.db.PragueDate(date)
 
-	s.mu.RLock()
-	if dp, ok := s.days[key]; ok {
-		s.mu.RUnlock()
-		copyPrices := make([]float32, len(dp.Prices))
-		copy(copyPrices, dp.Prices)
-		return &DayPrices{Prices: copyPrices}, true
-	}
-	s.mu.RUnlock()
-
-	prices, err := dataloader.FetchData(date)
+	has, err := s.db.HasDay(pragueDate)
 	if err != nil {
+		log.Printf("HasDay(%s) error: %v", pragueDate, err)
 		return nil, false
 	}
 
-	s.mu.Lock()
-	s.days[key] = DayPrices{Prices: prices}
-	s.mu.Unlock()
+	if !has {
+		quarters, err := dataloader.FetchData(date)
+		if err != nil {
+			return nil, false
+		}
+		if err := s.db.SaveQuarters(quarters); err != nil {
+			log.Printf("SaveQuarters(%s) error: %v", pragueDate, err)
+			return nil, false
+		}
+		return &DayPrices{Prices: quartersToPrices(quarters)}, true
+	}
 
-	copyPrices := make([]float32, len(prices))
-	copy(copyPrices, prices)
-	return &DayPrices{Prices: copyPrices}, true
+	quarters, err := s.db.GetDay(pragueDate)
+	if err != nil {
+		log.Printf("GetDay(%s) error: %v", pragueDate, err)
+		return nil, false
+	}
+	return &DayPrices{Prices: quartersToPrices(quarters)}, true
 }
 
-// MonthAverages fetches average prices for each day in the given month and returns a map
-// from day-of-month (1..31) to the daily average. Days that fail to load are absent.
-// Days strictly after maxDate are skipped to avoid pointless API calls for future days.
-func (s *AppState) MonthAverages(year int, month time.Month, loc *time.Location, includeDist bool, maxDate time.Time) map[int]float32 {
+func quartersToPrices(quarters []storage.Quarter) []float32 {
+	out := make([]float32, len(quarters))
+	for i, q := range quarters {
+		out[i] = q.Price
+	}
+	return out
+}
+
+// MonthAverages returns daily averages keyed by day-of-month (1..31) for the
+// given Prague-local month. Days strictly after maxDate are skipped. Missing
+// days are fetched and persisted on first access; subsequent calls hit only
+// the DB.
+func (s *AppState) MonthAverages(year int, month time.Month, loc *time.Location, _ bool, maxDate time.Time) map[int]float32 {
 	first := time.Date(year, month, 1, 0, 0, 0, 0, loc)
 	daysInMonth := first.AddDate(0, 1, -1).Day()
 
-	results := make(map[int]float32)
-	var mu sync.Mutex
 	var wg sync.WaitGroup
-
 	for day := 1; day <= daysInMonth; day++ {
 		d := time.Date(year, month, day, 0, 0, 0, 0, loc)
 		if d.After(maxDate) {
 			continue
 		}
 		wg.Add(1)
-		go func(d time.Time, day int) {
+		go func(d time.Time) {
 			defer wg.Done()
-			prices, ok := s.GetPrices(d)
-			if !ok {
-				return
-			}
-			var displayPrices []float32
-			if includeDist {
-				displayPrices = prices.TotalPrices(&s.Distribution)
-			} else {
-				displayPrices = prices.Prices
-			}
-			var sum float32
-			for _, p := range displayPrices {
-				sum += p
-			}
-			avg := sum / float32(len(displayPrices))
-			mu.Lock()
-			results[day] = avg
-			mu.Unlock()
-		}(d, day)
+			s.GetPrices(d)
+		}(d)
 	}
 	wg.Wait()
-	return results
+
+	from := time.Date(year, month, 1, 0, 0, 0, 0, loc).Format("2006-01-02")
+	to := time.Date(year, month, daysInMonth, 0, 0, 0, 0, loc).Format("2006-01-02")
+	avgs, err := s.db.MonthAverages(from, to)
+	if err != nil {
+		log.Printf("MonthAverages SELECT error: %v", err)
+		return map[int]float32{}
+	}
+
+	out := make(map[int]float32, len(avgs))
+	for date, avg := range avgs {
+		t, err := time.ParseInLocation("2006-01-02", date, loc)
+		if err != nil {
+			continue
+		}
+		out[t.Day()] = avg
+	}
+	return out
 }
 
 // ExpressionContext builds an EvaluateContext from yesterday/today (+tomorrow if late enough).

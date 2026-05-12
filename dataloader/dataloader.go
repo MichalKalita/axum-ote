@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/MichalKalita/ote/storage"
 )
 
 type point struct {
@@ -30,8 +32,11 @@ type response struct {
 
 var (
 	ErrPriceDataNotFound = errors.New("Price data not found")
-	ErrInvalidDataSize   = errors.New("Price data does not contain exactly 24 points")
 )
+
+// BaseURL is the OTE chart-data endpoint. Tests override it to point at a local
+// httptest.Server.
+var BaseURL = "https://www.ote-cr.cz/en/short-term-markets/electricity/day-ahead-market/@@chart-data"
 
 type UnexpectedStatusError struct {
 	Status int
@@ -41,13 +46,17 @@ func (e *UnexpectedStatusError) Error() string {
 	return fmt.Sprintf("Unexpected response status: %d", e.Status)
 }
 
-// FetchData fetches day-ahead electricity prices for the given date.
-func FetchData(date time.Time) ([]float32, error) {
-	dateStr := date.Format("2006-01-02")
-	url := fmt.Sprintf(
-		"https://www.ote-cr.cz/en/short-term-markets/electricity/day-ahead-market/@@chart-data?report_date=%s",
-		dateStr,
-	)
+// FetchData fetches day-ahead 15-minute electricity prices for the given
+// Prague-local date. The returned slice has one entry per quarter-hour;
+// timestamps are in UTC. On DST days the slice has 92 or 100 entries.
+func FetchData(date time.Time) ([]storage.Quarter, error) {
+	loc, err := time.LoadLocation("Europe/Prague")
+	if err != nil {
+		loc = time.UTC
+	}
+	dayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc)
+	dateStr := dayStart.Format("2006-01-02")
+	url := fmt.Sprintf("%s?report_date=%s", BaseURL, dateStr)
 	log.Printf("Fetching data for date %s", dateStr)
 
 	start := time.Now()
@@ -84,13 +93,10 @@ func FetchData(date time.Time) ([]float32, error) {
 
 	for _, line := range respJSON.Data.DataLine {
 		if line.Title == "15min price (EUR/MWh)" {
-			if len(line.Point) != 96 {
-				log.Printf("Price data does not contain exactly 96 points.")
-				return nil, ErrInvalidDataSize
-			}
-			out := make([]float32, len(line.Point))
+			out := make([]storage.Quarter, len(line.Point))
 			for i, p := range line.Point {
-				out[i] = p.Y
+				ts := dayStart.Add(time.Duration(i) * 15 * time.Minute).UTC()
+				out[i] = storage.Quarter{Ts: ts, Price: p.Y}
 			}
 			return out, nil
 		}

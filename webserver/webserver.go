@@ -12,12 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MichalKalita/ote/storage"
 	"github.com/andybalholm/brotli"
 )
 
 // StartWebServer starts the HTTP server on $PORT (default 3000).
-func StartWebServer() {
-	state := NewAppState()
+func StartWebServer(db *storage.DB) {
+	state := NewAppState(db)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
