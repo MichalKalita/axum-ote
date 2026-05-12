@@ -1,0 +1,9 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "go build -o ote ."
+  },
+  "deploy": {
+    "startCommand": "./ote"
+  }
+}
