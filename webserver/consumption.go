@@ -306,6 +306,41 @@ func priceFmt(p float32, currency Currency) string {
 	return fmt.Sprintf("%.1f", v)
 }
 
+// totalCost converts a per-MWh EUR price + kWh quantity into a total bill
+// in the chosen currency. EUR keeps two decimals; CZK is rounded to whole
+// crowns (typical bill granularity).
+func totalCost(kwh, eurPerMWh float32, currency Currency) float32 {
+	eur := kwh * eurPerMWh / 1000.0
+	if currency == CurrencyCzk {
+		return eur * CurrencyRate
+	}
+	return eur
+}
+
+func formatTotalCost(c float32, currency Currency) string {
+	if currency == CurrencyCzk {
+		return fmt.Sprintf("%.0f", c)
+	}
+	return fmt.Sprintf("%.2f", c)
+}
+
+func currencySymbol(c Currency) string {
+	if c == CurrencyCzk {
+		return "CZK"
+	}
+	return "EUR"
+}
+
+// costAtScore returns the total bill in `currency` if the user had achieved
+// `scorePct` (0..100) given the day's Best/Worst envelope. The price at a
+// given score is a linear interpolation between Worst (0%) and Best (100%)
+// because Score is defined that way (see scoreFromCosts).
+func costAtScore(overall DayStats, scorePct float32, currency Currency) float32 {
+	score := scorePct / 100.0
+	price := overall.WorstPrice - score*(overall.WorstPrice-overall.BestPrice)
+	return totalCost(overall.TotalKWh, price, currency)
+}
+
 func scoreColorClass(pct float32) string {
 	switch {
 	case pct >= 75:
@@ -338,6 +373,8 @@ func renderConsumptionResults(a *ConsumptionAnalysis, currency Currency) string 
 	sb.WriteString(`<h2 class="text-2xl font-semibold mb-2 mt-6">Summary</h2>`)
 	sb.WriteString(renderSummaryCard(a.Overall, currency))
 
+	sb.WriteString(renderScoreScenarios(a.Overall, currency))
+
 	sb.WriteString(`<h2 class="text-2xl font-semibold mb-2 mt-8">Per day</h2>`)
 	sb.WriteString(`<div class="flex justify-center"><table>`)
 	fmt.Fprintf(&sb,
@@ -347,7 +384,64 @@ func renderConsumptionResults(a *ConsumptionAnalysis, currency Currency) string 
 	}
 	sb.WriteString(`</table></div>`)
 	sb.WriteString(`<p class="text-xs mt-4 text-neutral-500">Best/Worst show what the same daily consumption pattern would have cost if shifted into the cheapest / most expensive quarters of the same day. Score is the position between them (100% = best, 0% = worst).</p>`)
+	return sb.String()
+}
 
+// renderScoreScenarios shows a 0..100% × 10% ladder of total bills computed
+// from the overall stats. The bucket nearest the user's actual score is
+// highlighted so they can see what the next 10% of improvement would save.
+// If Best == Worst (e.g. perfectly flat consumption — see
+// TestAnalyze_FlatConsumption_WeightedEqualsFlatAvg), the scenarios collapse
+// to a single value, so the table is omitted as uninformative.
+func renderScoreScenarios(overall DayStats, currency Currency) string {
+	if overall.TotalKWh == 0 || overall.WorstPrice <= overall.BestPrice {
+		return ""
+	}
+	actualPctI := max(0, min(100, int(overall.Score*100+0.5)))
+	nearestBucket := min(100, (actualPctI+5)/10*10)
+	actualCost := totalCost(overall.TotalKWh, overall.WeightedPrice, currency)
+	sym := currencySymbol(currency)
+
+	var sb strings.Builder
+	sb.WriteString(`<h2 class="text-2xl font-semibold mb-2 mt-8">Cost by score</h2>`)
+	fmt.Fprintf(&sb,
+		`<p class="mb-2">Your actual: <span class="font-bold">%d%%</span> ≈ <span class="font-bold">%s</span> %s</p>`,
+		actualPctI, formatTotalCost(actualCost, currency), html.EscapeString(sym))
+	sb.WriteString(`<div class="flex justify-center"><table>`)
+	fmt.Fprintf(&sb,
+		`<tr><th class="px-2">Score</th><th class="px-2">Avg %s</th><th class="px-2">Total %s</th><th class="px-2">vs actual</th></tr>`,
+		html.EscapeString(currency.ShortLabel()), html.EscapeString(sym))
+
+	for pct := 0; pct <= 100; pct += 10 {
+		price := overall.WorstPrice - float32(pct)/100.0*(overall.WorstPrice-overall.BestPrice)
+		cost := costAtScore(overall, float32(pct), currency)
+		diff := actualCost - cost
+
+		rowCls := ""
+		if pct == nearestBucket {
+			rowCls = ` class="bg-blue-100 dark:bg-blue-900 font-bold"`
+		}
+		fmt.Fprintf(&sb, `<tr%s>`, rowCls)
+		fmt.Fprintf(&sb, `<td class="px-2 font-mono">%d%%</td>`, pct)
+		fmt.Fprintf(&sb, `<td class="px-2 font-mono text-right">%s</td>`, priceFmt(price, currency))
+		fmt.Fprintf(&sb, `<td class="px-2 font-mono text-right">%s</td>`, formatTotalCost(cost, currency))
+
+		var diffStr, diffCls string
+		switch {
+		case diff > 0.5:
+			diffStr = "−" + formatTotalCost(diff, currency)
+			diffCls = "text-green-700 dark:text-green-400"
+		case diff < -0.5:
+			diffStr = "+" + formatTotalCost(-diff, currency)
+			diffCls = "text-red-700 dark:text-red-400"
+		default:
+			diffStr = "—"
+		}
+		fmt.Fprintf(&sb, `<td class="px-2 font-mono text-right %s">%s</td>`, diffCls, diffStr)
+		sb.WriteString(`</tr>`)
+	}
+	sb.WriteString(`</table></div>`)
+	sb.WriteString(`<p class="text-xs mt-2 text-neutral-500">Linear interpolation between Worst (0%) and Best (100%) over your total consumption. "vs actual" is how much you'd save (green) or extra-pay (red) at that score.</p>`)
 	return sb.String()
 }
 

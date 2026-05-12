@@ -570,6 +570,60 @@ func TestAnalyze_AfterPublishHour_TomorrowAllowed_DayAfterStillFuture(t *testing
 	}
 }
 
+// costAtScore: anchor points must be exact. At 0% the bill equals
+// kWh × WorstPrice / 1000 (in EUR); at 100% it equals kWh × BestPrice / 1000;
+// at the user's own score, it must reproduce kWh × WeightedPrice / 1000
+// (i.e. the actual paid amount) — that is the closed-form check that the
+// interpolation is consistent with the score definition.
+func TestCostAtScore_AnchorsMatchEnvelopeAndActual(t *testing.T) {
+	overall := DayStats{
+		TotalKWh:      1000,
+		WeightedPrice: 40,
+		FlatPrice:     50,
+		BestPrice:     10,
+		WorstPrice:    90,
+		Score:         (90.0 - 40.0) / (90.0 - 10.0), // = 0.625
+	}
+	// Score 0% → 1000 × 90 / 1000 = 90 EUR.
+	if got := costAtScore(overall, 0, CurrencyEur); !approxEqual(got, 90, 0.001) {
+		t.Errorf("cost@0%%: got %v, want 90", got)
+	}
+	// Score 100% → 1000 × 10 / 1000 = 10 EUR.
+	if got := costAtScore(overall, 100, CurrencyEur); !approxEqual(got, 10, 0.001) {
+		t.Errorf("cost@100%%: got %v, want 10", got)
+	}
+	// Score = user's actual → 1000 × 40 / 1000 = 40 EUR.
+	if got := costAtScore(overall, overall.Score*100, CurrencyEur); !approxEqual(got, 40, 0.001) {
+		t.Errorf("cost@actual: got %v, want 40", got)
+	}
+}
+
+// costAtScore in CZK applies the EUR/CZK rate so total bills come out in
+// crowns (typical user expectation: "kolik korun bych ušetřil").
+func TestCostAtScore_CZKAppliesRate(t *testing.T) {
+	overall := DayStats{TotalKWh: 1000, BestPrice: 0, WorstPrice: 100, WeightedPrice: 50, Score: 0.5}
+	// EUR at 0% = 1000 × 100 / 1000 = 100 EUR; CZK = 100 × 24.30 = 2430.
+	got := costAtScore(overall, 0, CurrencyCzk)
+	want := float32(100) * CurrencyRate
+	if !approxEqual(got, want, 0.01) {
+		t.Errorf("CZK total: got %v, want %v", got, want)
+	}
+}
+
+// Monotonicity: cost strictly decreases as score increases (since Best <
+// Worst). Without this property the "cost by score" table would mislead.
+func TestCostAtScore_MonotonicDecreasing(t *testing.T) {
+	overall := DayStats{TotalKWh: 250, BestPrice: 5, WorstPrice: 60}
+	var prev float32 = 1e9
+	for pct := 0; pct <= 100; pct += 10 {
+		c := costAtScore(overall, float32(pct), CurrencyEur)
+		if c > prev {
+			t.Errorf("cost should decrease with score; at %d%% got %v after %v", pct, c, prev)
+		}
+		prev = c
+	}
+}
+
 // AnalyzeConsumption returns an error (not silent success) when every row
 // is in the future — the user would otherwise see an empty results page.
 func TestAnalyze_AllFuture_ReturnsError(t *testing.T) {
