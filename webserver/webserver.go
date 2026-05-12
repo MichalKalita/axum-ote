@@ -34,6 +34,9 @@ func StartWebServer(db *storage.DB) {
 	mux.HandleFunc("/opt", func(w http.ResponseWriter, r *http.Request) {
 		routeGetOpt(state, w, r)
 	})
+	mux.HandleFunc("/consumption", func(w http.ResponseWriter, r *http.Request) {
+		routeConsumption(state, w, r)
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -148,6 +151,8 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 		html.EscapeString(inputDate.Format("2006-01-02")))
 	sb.WriteString(`<p class="text-sm mb-8">` + Link("https://github.com/MichalKalita/ote", "github.com/MichalKalita/ote") + `</p>`)
 	sb.WriteString(Link("/optimizer", "Optimizer"))
+	sb.WriteString(" | ")
+	sb.WriteString(Link("/consumption", "Consumption analysis"))
 	sb.WriteString(`<div class="flex flex-row justify-center gap-2">`)
 	curStr := currency.String()
 	distStr := strconv.FormatBool(includeDist)
@@ -330,4 +335,85 @@ func routeGetOpt(state *AppState, w http.ResponseWriter, r *http.Request) {
 	result := condition.Evaluate(expCtx)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprintf(w, "%v", result)
+}
+
+func routeConsumption(state *AppState, w http.ResponseWriter, r *http.Request) {
+	currency := CurrencyEur
+	if cur := r.URL.Query().Get("cur"); cur != "" {
+		if c, err := ParseCurrency(cur); err == nil {
+			currency = c
+		}
+	}
+	curStr := currency.String()
+
+	var sb strings.Builder
+	sb.WriteString(`<h1 class="text-4xl font-bold">Consumption analysis</h1>`)
+	sb.WriteString(`<p class="text-sm mb-8">` + Link("https://github.com/MichalKalita/ote", "github.com/MichalKalita/ote") + `</p>`)
+	sb.WriteString(Link("/", "Homepage"))
+
+	sb.WriteString(`<div class="my-4">`)
+	if currency == CurrencyEur {
+		sb.WriteString(Link("/consumption?cur=czk", "Change to CZK"))
+	} else {
+		sb.WriteString(Link("/consumption?cur=eur", "Change to EUR"))
+	}
+	sb.WriteString(`</div>`)
+
+	if r.Method == http.MethodPost {
+		const maxUpload = 10 << 20 // 10 MiB
+		r.Body = http.MaxBytesReader(w, r.Body, maxUpload)
+		if err := r.ParseMultipartForm(maxUpload); err != nil {
+			renderConsumptionPage(w, sb.String()+
+				`<p class="text-red-600 my-4">Upload too large or invalid form.</p>`+
+				renderConsumptionForm(curStr), http.StatusBadRequest)
+			return
+		}
+		file, _, err := r.FormFile("csv")
+		if err != nil {
+			renderConsumptionPage(w, sb.String()+
+				`<p class="text-red-600 my-4">Missing CSV file.</p>`+
+				renderConsumptionForm(curStr), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		quarters, err := ParseConsumptionCSV(file)
+		if err != nil {
+			body := sb.String() +
+				fmt.Sprintf(`<p class="text-red-600 my-4">%s</p>`, html.EscapeString(err.Error())) +
+				renderConsumptionForm(curStr)
+			renderConsumptionPage(w, body, http.StatusBadRequest)
+			return
+		}
+		if len(quarters) == 0 {
+			renderConsumptionPage(w, sb.String()+
+				`<p class="text-red-600 my-4">No data rows found in CSV.</p>`+
+				renderConsumptionForm(curStr), http.StatusBadRequest)
+			return
+		}
+
+		analysis, err := state.AnalyzeConsumption(quarters, time.Now())
+		if err != nil {
+			body := sb.String() +
+				fmt.Sprintf(`<p class="text-red-600 my-4">%s</p>`, html.EscapeString(err.Error())) +
+				renderConsumptionForm(curStr)
+			renderConsumptionPage(w, body, http.StatusBadRequest)
+			return
+		}
+		sb.WriteString(renderConsumptionResults(analysis, currency))
+		sb.WriteString(`<div class="my-8 text-sm">Upload another file:</div>`)
+		sb.WriteString(renderConsumptionForm(curStr))
+		renderConsumptionPage(w, sb.String(), http.StatusOK)
+		return
+	}
+
+	sb.WriteString(`<p class="my-4">Upload a CSV exported from ČEZ "Profilová náměřená data" (PND export). The file is processed in memory and is not stored on the server.</p>`)
+	sb.WriteString(renderConsumptionForm(curStr))
+	renderConsumptionPage(w, sb.String(), http.StatusOK)
+}
+
+func renderConsumptionPage(w http.ResponseWriter, body string, status int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	io.WriteString(w, RenderLayout(body))
 }

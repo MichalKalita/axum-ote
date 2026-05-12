@@ -81,6 +81,23 @@ func TestFillWithShade(t *testing.T) {
 	}
 }
 
+// The consumption-analysis score gradient uses yellow and orange shades —
+// without them the layout renders unstyled and the css_gen log fills with
+// "unknown class" lines.
+func TestYellowOrangeShadesAreRecognized(t *testing.T) {
+	cases := map[string]string{
+		"text-yellow-700": ".text-yellow-700{color:#a16207}",
+		"text-yellow-400": ".text-yellow-400{color:#facc15}",
+		"text-orange-700": ".text-orange-700{color:#c2410c}",
+		"text-orange-400": ".text-orange-400{color:#fb923c}",
+	}
+	for class, want := range cases {
+		if got := one(class); got != want {
+			t.Errorf("%s: got %q want %q", class, got, want)
+		}
+	}
+}
+
 func TestDarkVariantWrapsInMediaQuery(t *testing.T) {
 	got := one("dark:bg-gray-900")
 	want := `@media (prefers-color-scheme:dark){.dark\:bg-gray-900{background-color:#111827}}`
