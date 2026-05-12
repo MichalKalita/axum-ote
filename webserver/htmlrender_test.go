@@ -2,6 +2,29 @@ package webserver
 
 import "testing"
 
+func TestFormatPriceRoundsCarryToNextInteger(t *testing.T) {
+	cases := []struct {
+		name  string
+		price float32
+		want  string
+	}{
+		{"plain", 2.10, `2<span class="text-neutral-500 text-sm">.10</span>`},
+		{"carry from .999", 2.999, `3<span class="text-neutral-500 text-sm">.00</span>`},
+		{"carry from .9999", 2.9999, `3<span class="text-neutral-500 text-sm">.00</span>`},
+		{"below carry", 2.99, `2<span class="text-neutral-500 text-sm">.99</span>`},
+		{"zero", 0, `0<span class="text-neutral-500 text-sm">.00</span>`},
+		{"negative no carry", -2.5, `-2<span class="text-neutral-500 text-sm">.50</span>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := formatPrice(c.price, CurrencyEur)
+			if got != c.want {
+				t.Fatalf("formatPrice(%v): got %q want %q", c.price, got, c.want)
+			}
+		})
+	}
+}
+
 func TestChartSettingsWithPricesNegativeZeroPositive(t *testing.T) {
 	cs := DefaultChartSettings()
 	prices := []float32{-10, 0, 10}

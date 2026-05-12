@@ -177,10 +177,10 @@ func (c Condition) EvaluateAllInChart(ctx *EvaluateContext) string {
 }
 
 func formatPrice(price float32, currency Currency) string {
-	p := currency.Convert(price)
-	floor := float32(math.Floor(float64(p)))
-	frac := (p - floor) * 100.0
-	return fmt.Sprintf(`%.0f<span class="text-neutral-500 text-sm">.%02.0f</span>`, floor, frac)
+	s := fmt.Sprintf("%.2f", currency.Convert(price))
+	idx := strings.Index(s, ".")
+	return fmt.Sprintf(`%s<span class="text-neutral-500 text-sm">.%s</span>`,
+		s[:idx], s[idx+1:])
 }
 
 // Link returns an anchor tag with the underline+hover style.
