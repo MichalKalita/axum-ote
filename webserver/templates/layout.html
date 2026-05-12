@@ -1,0 +1,15 @@
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OTE CR Price Checker</title>
+<style>{{.CSS}}</style>
+<style>.hover-highlight{outline-width:2px;outline-style:solid;outline-color:#3b82f6;font-weight:700}rect.hover-highlight{fill:#2563eb!important}</style>
+<script>document.addEventListener('mouseover',function(e){var el=e.target.closest('[data-idx]');document.querySelectorAll('.hover-highlight').forEach(function(h){h.classList.remove('hover-highlight')});if(el){var idx=el.getAttribute('data-idx');document.querySelectorAll('[data-idx="'+idx+'"]').forEach(function(h){h.classList.add('hover-highlight')})}})</script>
+<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="{{.BodyClasses}}">
+{{.Content}}
+</body>
+</html>
