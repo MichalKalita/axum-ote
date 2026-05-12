@@ -186,6 +186,37 @@ func TestFetchData_InvalidJSONReturnsError(t *testing.T) {
 	}
 }
 
+func TestFetchData_BeforeCutoffReturnsErrorAndSkipsRequest(t *testing.T) {
+	loc := mustPragueLoc(t)
+	var hit bool
+	startOTEServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		w.Write(otePayload(nil, true))
+	})
+
+	// 2025-09-30 Prague is the last day before OTE's 15-minute series.
+	_, err := FetchData(time.Date(2025, 9, 30, 0, 0, 0, 0, loc))
+	if err != ErrDateBeforeQuarterHourly {
+		t.Fatalf("got %v, want ErrDateBeforeQuarterHourly", err)
+	}
+	if hit {
+		t.Error("FetchData must not issue an HTTP request for dates before the cutoff")
+	}
+}
+
+func TestFetchData_CutoffDayAllowed(t *testing.T) {
+	loc := mustPragueLoc(t)
+	prices := make([]float32, 96)
+	startOTEServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(otePayload(prices, true))
+	})
+	// 2025-10-01 Prague — the first allowed day.
+	_, err := FetchData(time.Date(2025, 10, 1, 0, 0, 0, 0, loc))
+	if err != nil {
+		t.Fatalf("cutoff day must be allowed, got %v", err)
+	}
+}
+
 func TestFetchData_TimestampsAcrossPragueMidnightInWinter(t *testing.T) {
 	loc := mustPragueLoc(t)
 	prices := make([]float32, 96)

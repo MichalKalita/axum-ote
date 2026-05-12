@@ -32,6 +32,10 @@ type response struct {
 
 var (
 	ErrPriceDataNotFound = errors.New("Price data not found")
+	// ErrDateBeforeQuarterHourly is returned for any date before 2025-10-01
+	// (Prague-local), the first day OTE published 15-minute prices. No HTTP
+	// request is made for such dates.
+	ErrDateBeforeQuarterHourly = errors.New("15-minute prices are only available from 2025-10-01")
 )
 
 // BaseURL is the OTE chart-data endpoint. Tests override it to point at a local
@@ -55,6 +59,9 @@ func FetchData(date time.Time) ([]storage.Quarter, error) {
 		loc = time.UTC
 	}
 	dayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc)
+	if dayStart.Before(time.Date(2025, 10, 1, 0, 0, 0, 0, loc)) {
+		return nil, ErrDateBeforeQuarterHourly
+	}
 	dateStr := dayStart.Format("2006-01-02")
 	url := fmt.Sprintf("%s?report_date=%s", BaseURL, dateStr)
 	log.Printf("Fetching data for date %s", dateStr)
