@@ -144,8 +144,9 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	labels := distLabels[:]
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, `<h1 class="text-4xl font-bold mb-8">OTE prices %s</h1>`,
+	fmt.Fprintf(&sb, `<h1 class="text-4xl font-bold">OTE prices %s</h1>`,
 		html.EscapeString(inputDate.Format("2006-01-02")))
+	sb.WriteString(`<p class="text-sm mb-8">` + Link("https://github.com/MichalKalita/ote", "github.com/MichalKalita/ote") + `</p>`)
 	sb.WriteString(Link("/optimizer", "Optimizer"))
 	sb.WriteString(`<div class="flex flex-row justify-center gap-2">`)
 	curStr := currency.String()
@@ -271,7 +272,8 @@ func routeGetOptimizer(state *AppState, w http.ResponseWriter, r *http.Request) 
 	examples := []string{`/optimizer?exp=[{"price":120},{"hours":[0,10]}]`}
 
 	var sb strings.Builder
-	sb.WriteString(`<h1 class="text-4xl font-bold mb-8">Optimizer, find cheapist hours</h1>`)
+	sb.WriteString(`<h1 class="text-4xl font-bold">Optimizer, find cheapist hours</h1>`)
+	sb.WriteString(`<p class="text-sm mb-8">` + Link("https://github.com/MichalKalita/ote", "github.com/MichalKalita/ote") + `</p>`)
 	sb.WriteString(Link("/", "Homepage"))
 	sb.WriteString(`<div class="text-left">`)
 	sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Condition</h2>`)
