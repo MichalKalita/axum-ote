@@ -6,7 +6,9 @@ import (
 	"html"
 	"html/template"
 	"math"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const bodyClasses = "p-4 text-center dark:bg-gray-900 dark:text-gray-300"
@@ -267,6 +269,86 @@ func (c Condition) RenderHTML() string {
 			c.Cheap.Hours, c.Cheap.From, c.Cheap.To)
 	}
 	return ""
+}
+
+// RenderCalendar renders a month-grid calendar of selectable days, each showing the
+// average price for that day (in the given currency). Days strictly after maxDate are
+// shown as inactive (no link).
+func RenderCalendar(year int, month time.Month, loc *time.Location, selectedDate, today, maxDate time.Time, averages map[int]float32, currency Currency, includeDist bool) string {
+	first := time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	daysInMonth := first.AddDate(0, 1, -1).Day()
+	// Monday-first weekday index (0..6).
+	leading := (int(first.Weekday()) + 6) % 7
+
+	curStr := currency.String()
+	distStr := strconv.FormatBool(includeDist)
+
+	prevMonth := first.AddDate(0, -1, 0)
+	nextMonth := first.AddDate(0, 1, 0)
+
+	var sb strings.Builder
+	sb.WriteString(`<div class="mb-4 inline-block">`)
+	sb.WriteString(`<div class="flex flex-row justify-center items-center gap-2 mb-2">`)
+	sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=%s&dist=%s", prevMonth.Format("2006-01-02"), curStr, distStr), "◀"))
+	fmt.Fprintf(&sb, `<span class="font-bold">%s</span>`, first.Format("January 2006"))
+	sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=%s&dist=%s", nextMonth.Format("2006-01-02"), curStr, distStr), "▶"))
+	sb.WriteString(`</div>`)
+
+	sb.WriteString(`<table>`)
+	sb.WriteString(`<tr>`)
+	for _, wd := range []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"} {
+		fmt.Fprintf(&sb, `<th class="px-2 text-xs">%s</th>`, wd)
+	}
+	sb.WriteString(`</tr>`)
+
+	day := 1
+	for day <= daysInMonth {
+		sb.WriteString(`<tr>`)
+		for col := 0; col < 7; col++ {
+			if (day == 1 && col < leading) || day > daysInMonth {
+				sb.WriteString(`<td></td>`)
+				continue
+			}
+			d := time.Date(year, month, day, 0, 0, 0, 0, loc)
+			classes := []string{"px-2", "py-1", "border", "rounded", "text-center", "block", "font-mono"}
+			if d.Equal(selectedDate) {
+				classes = append(classes, "bg-blue-200", "dark:bg-blue-800", "font-bold")
+			} else if d.Equal(today) {
+				classes = append(classes, "outline-2", "outline-blue-500")
+			} else {
+				classes = append(classes, "hover:bg-gray-100", "dark:hover:bg-gray-800")
+			}
+
+			var priceStr string
+			if avg, ok := averages[day]; ok {
+				if currency == CurrencyCzk {
+					priceStr = fmt.Sprintf("%.2f", currency.Convert(avg))
+				} else {
+					priceStr = fmt.Sprintf("%.0f", currency.Convert(avg))
+				}
+			} else {
+				priceStr = "—"
+			}
+
+			dayLabel := fmt.Sprintf(`<span class="text-sm">%d</span><br><span class="text-xs">%s</span>`,
+				day, html.EscapeString(priceStr))
+
+			sb.WriteString(`<td>`)
+			if d.After(maxDate) {
+				fmt.Fprintf(&sb, `<span class="%s">%s</span>`, strings.Join(classes, " "), dayLabel)
+			} else {
+				url := fmt.Sprintf("/?date=%s&cur=%s&dist=%s", d.Format("2006-01-02"), curStr, distStr)
+				fmt.Fprintf(&sb, `<a href="%s" class="%s">%s</a>`,
+					html.EscapeString(url), strings.Join(classes, " "), dayLabel)
+			}
+			sb.WriteString(`</td>`)
+			day++
+		}
+		sb.WriteString(`</tr>`)
+	}
+	sb.WriteString(`</table>`)
+	sb.WriteString(`</div>`)
+	return sb.String()
 }
 
 // RenderCheapForm renders the GET form for editing the Cheap fields.

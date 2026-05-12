@@ -131,6 +131,49 @@ func (s *AppState) GetPrices(date time.Time) (*DayPrices, bool) {
 	return &DayPrices{Prices: copyPrices}, true
 }
 
+// MonthAverages fetches average prices for each day in the given month and returns a map
+// from day-of-month (1..31) to the daily average. Days that fail to load are absent.
+// Days strictly after maxDate are skipped to avoid pointless API calls for future days.
+func (s *AppState) MonthAverages(year int, month time.Month, loc *time.Location, includeDist bool, maxDate time.Time) map[int]float32 {
+	first := time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	daysInMonth := first.AddDate(0, 1, -1).Day()
+
+	results := make(map[int]float32)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for day := 1; day <= daysInMonth; day++ {
+		d := time.Date(year, month, day, 0, 0, 0, 0, loc)
+		if d.After(maxDate) {
+			continue
+		}
+		wg.Add(1)
+		go func(d time.Time, day int) {
+			defer wg.Done()
+			prices, ok := s.GetPrices(d)
+			if !ok {
+				return
+			}
+			var displayPrices []float32
+			if includeDist {
+				displayPrices = prices.TotalPrices(&s.Distribution)
+			} else {
+				displayPrices = prices.Prices
+			}
+			var sum float32
+			for _, p := range displayPrices {
+				sum += p
+			}
+			avg := sum / float32(len(displayPrices))
+			mu.Lock()
+			results[day] = avg
+			mu.Unlock()
+		}(d, day)
+	}
+	wg.Wait()
+	return results
+}
+
 // ExpressionContext builds an EvaluateContext from yesterday/today (+tomorrow if late enough).
 func (s *AppState) ExpressionContext() *EvaluateContext {
 	loc, err := time.LoadLocation("Europe/Prague")

@@ -56,11 +56,12 @@ const (
 	ruleBase ruleKind = iota
 	ruleHover
 	ruleDark
+	ruleDarkHover
 )
 
 // GenerateCSS turns the set of class names into a stylesheet.
 func GenerateCSS(classes map[string]struct{}) string {
-	var base, hover, dark []string
+	var base, hover, dark, darkHover []string
 	for class := range classes {
 		kind, css, ok := classToRule(class)
 		if !ok {
@@ -74,11 +75,14 @@ func GenerateCSS(classes map[string]struct{}) string {
 			hover = append(hover, css)
 		case ruleDark:
 			dark = append(dark, css)
+		case ruleDarkHover:
+			darkHover = append(darkHover, css)
 		}
 	}
 	sort.Strings(base)
 	sort.Strings(hover)
 	sort.Strings(dark)
+	sort.Strings(darkHover)
 
 	var sb strings.Builder
 	sb.WriteString(cssReset)
@@ -88,9 +92,12 @@ func GenerateCSS(classes map[string]struct{}) string {
 	for _, s := range hover {
 		sb.WriteString(s)
 	}
-	if len(dark) > 0 {
+	if len(dark) > 0 || len(darkHover) > 0 {
 		sb.WriteString("@media (prefers-color-scheme:dark){")
 		for _, s := range dark {
+			sb.WriteString(s)
+		}
+		for _, s := range darkHover {
 			sb.WriteString(s)
 		}
 		sb.WriteByte('}')
@@ -102,6 +109,9 @@ func classToRule(class string) (ruleKind, string, bool) {
 	var kind ruleKind
 	base := class
 	switch {
+	case strings.HasPrefix(class, "dark:hover:"):
+		kind = ruleDarkHover
+		base = strings.TrimPrefix(class, "dark:hover:")
 	case strings.HasPrefix(class, "dark:"):
 		kind = ruleDark
 		base = strings.TrimPrefix(class, "dark:")
@@ -117,7 +127,7 @@ func classToRule(class string) (ruleKind, string, bool) {
 	}
 	escaped := strings.ReplaceAll(class, ":", `\:`)
 	pseudo := ""
-	if kind == ruleHover {
+	if kind == ruleHover || kind == ruleDarkHover {
 		pseudo = ":hover"
 	}
 	return kind, fmt.Sprintf(".%s%s%s{%s}", escaped, pseudo, suffix, body), true
@@ -227,6 +237,10 @@ func staticRule(class string) (string, bool) {
 		return "display:flex", true
 	case "inline-flex":
 		return "display:inline-flex", true
+	case "block":
+		return "display:block", true
+	case "inline-block":
+		return "display:inline-block", true
 	case "flex-row":
 		return "flex-direction:row", true
 	case "flex-col":

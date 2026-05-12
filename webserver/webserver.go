@@ -130,8 +130,14 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	} else {
 		displayPrices = prices.Prices
 	}
-	cheapestIdx, _ := CheapestHour(displayPrices)
-	expensiveIdx, _ := ExpensiveHour(displayPrices)
+	cheapestIdx, minPrice := CheapestHour(displayPrices)
+	expensiveIdx, maxPrice := ExpensiveHour(displayPrices)
+
+	var sum float32
+	for _, p := range displayPrices {
+		sum += p
+	}
+	avgPrice := sum / float32(len(displayPrices))
 
 	distLabels := state.Distribution.ByHours()
 	labels := distLabels[:]
@@ -141,25 +147,12 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 		html.EscapeString(inputDate.Format("2006-01-02")))
 	sb.WriteString(Link("/optimizer", "Optimizer"))
 	sb.WriteString(`<div class="flex flex-row justify-center gap-2">`)
-	prevDate := inputDate.AddDate(0, 0, -1).Format("2006-01-02")
-	nextDate := inputDate.AddDate(0, 0, 1).Format("2006-01-02")
 	curStr := currency.String()
 	distStr := strconv.FormatBool(includeDist)
-	sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=%s&dist=%s", prevDate, curStr, distStr), "◀"))
-	fmt.Fprintf(&sb, `<span class="font-bold">%s</span>`, inputDate.Format("2006-01-02"))
-	sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=%s&dist=%s", nextDate, curStr, distStr), "▶"))
-	sb.WriteString(" | ")
-	if inputDate.Equal(today) {
-		sb.WriteString(`<span class="font-bold text-blue-600 dark:text-blue-400">today</span>`)
-	} else {
-		sb.WriteString(Link(fmt.Sprintf("/?cur=%s&dist=%s", curStr, distStr),
-			fmt.Sprintf("today (%s)", today.Format("2006-01-02"))))
-	}
-	sb.WriteString(" | ")
 	if currency == CurrencyEur {
-		sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=czk&dist=%s", inputDate.Format("2006-01-02"), distStr), "CZK"))
+		sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=czk&dist=%s", inputDate.Format("2006-01-02"), distStr), "Change to CZK"))
 	} else {
-		sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=eur&dist=%s", inputDate.Format("2006-01-02"), distStr), "EUR"))
+		sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=eur&dist=%s", inputDate.Format("2006-01-02"), distStr), "Change to EUR"))
 	}
 	sb.WriteString(" | ")
 	sb.WriteString(`<form method="GET" class="inline-flex items-center gap-1">`)
@@ -173,6 +166,21 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	sb.WriteString(`<label for="dist">Include distribution</label>`)
 	sb.WriteString(`</form>`)
 	sb.WriteString(`</div>`)
+
+	maxDate := today
+	if now.Hour() >= NextDayPricesHour {
+		maxDate = today.AddDate(0, 0, 1)
+	}
+	monthAvgs := state.MonthAverages(inputDate.Year(), inputDate.Month(), loc, includeDist, maxDate)
+	sb.WriteString(`<div class="flex justify-center">`)
+	sb.WriteString(RenderCalendar(inputDate.Year(), inputDate.Month(), loc, inputDate, today, maxDate, monthAvgs, currency, includeDist))
+	sb.WriteString(`</div>`)
+
+	fmt.Fprintf(&sb, `<div class="mb-4">Min: <span class="font-bold text-green-700 dark:text-green-400">%.2f</span> | Avg: <span class="font-bold">%.2f</span> | Max: <span class="font-bold text-red-700 dark:text-red-400">%.2f</span> %s</div>`,
+		currency.Convert(minPrice),
+		currency.Convert(avgPrice),
+		currency.Convert(maxPrice),
+		html.EscapeString(currency.ShortLabel()))
 
 	sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Graph</h2>`)
 	sb.WriteString(`<div class="mb-4 flex justify-center">`)
