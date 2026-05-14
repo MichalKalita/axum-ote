@@ -192,7 +192,9 @@ func Link(url, text string) string {
 }
 
 // RenderTable renders the 24x4 table of quarter-hour prices for a single day.
-func (d *DayPrices) RenderTable(dist *Distribution, actualIndex int, currency Currency, includeDist bool) string {
+// Active-hour highlighting is applied client-side by the page script so it stays
+// in sync with the wall clock as time passes.
+func (d *DayPrices) RenderTable(dist *Distribution, currency Currency, includeDist bool) string {
 	totalPrices := d.TotalPrices(dist)
 	var displayPrices []float32
 	if includeDist {
@@ -224,9 +226,6 @@ func (d *DayPrices) RenderTable(dist *Distribution, actualIndex int, currency Cu
 			}
 			if idx == maxIdx {
 				classes = append(classes, "bg-red-100", "dark:bg-red-900")
-			}
-			if idx == actualIndex {
-				classes = append(classes, "font-bold", "outline-2", "outline-blue-500")
 			}
 			if price < 0 {
 				classes = append(classes, "text-green-700")
@@ -342,7 +341,12 @@ func RenderCalendar(year int, month time.Month, loc *time.Location, selectedDate
 			if d.After(maxDate) {
 				fmt.Fprintf(&sb, `<span class="%s">%s</span>`, strings.Join(classes, " "), dayLabel)
 			} else {
-				url := fmt.Sprintf("/?date=%s&cur=%s&dist=%s", d.Format("2006-01-02"), curStr, distStr)
+				var url string
+				if d.Equal(today) {
+					url = fmt.Sprintf("/?cur=%s&dist=%s", curStr, distStr)
+				} else {
+					url = fmt.Sprintf("/?date=%s&cur=%s&dist=%s", d.Format("2006-01-02"), curStr, distStr)
+				}
 				fmt.Fprintf(&sb, `<a href="%s" class="%s">%s</a>`,
 					html.EscapeString(url), strings.Join(classes, " "), dayLabel)
 			}

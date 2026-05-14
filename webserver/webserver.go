@@ -109,13 +109,6 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	}
 	includeDist := q.Get("dist") == "true"
 
-	hour := now.Hour()
-	minute := now.Minute() / 15
-	actualIndex := -1 // usize::MAX surrogate
-	if inputDate.Equal(today) {
-		actualIndex = hour*4 + minute
-	}
-
 	chart := DefaultChartSettings()
 
 	prices, ok := state.GetPrices(inputDate)
@@ -156,14 +149,20 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	sb.WriteString(`<div class="flex flex-row justify-center gap-2">`)
 	curStr := currency.String()
 	distStr := strconv.FormatBool(includeDist)
+	datePrefix := ""
+	if !inputDate.Equal(today) {
+		datePrefix = fmt.Sprintf("date=%s&", inputDate.Format("2006-01-02"))
+	}
 	if currency == CurrencyEur {
-		sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=czk&dist=%s", inputDate.Format("2006-01-02"), distStr), "Change to CZK"))
+		sb.WriteString(Link(fmt.Sprintf("/?%scur=czk&dist=%s", datePrefix, distStr), "Change to CZK"))
 	} else {
-		sb.WriteString(Link(fmt.Sprintf("/?date=%s&cur=eur&dist=%s", inputDate.Format("2006-01-02"), distStr), "Change to EUR"))
+		sb.WriteString(Link(fmt.Sprintf("/?%scur=eur&dist=%s", datePrefix, distStr), "Change to EUR"))
 	}
 	sb.WriteString(" | ")
 	sb.WriteString(`<form method="GET" class="inline-flex items-center gap-1">`)
-	fmt.Fprintf(&sb, `<input type="hidden" name="date" value="%s">`, inputDate.Format("2006-01-02"))
+	if !inputDate.Equal(today) {
+		fmt.Fprintf(&sb, `<input type="hidden" name="date" value="%s">`, inputDate.Format("2006-01-02"))
+	}
 	fmt.Fprintf(&sb, `<input type="hidden" name="cur" value="%s">`, curStr)
 	checked := ""
 	if includeDist {
@@ -189,12 +188,10 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 		currency.Convert(maxPrice),
 		html.EscapeString(currency.ShortLabel()))
 
+	fmt.Fprintf(&sb, `<div data-page-date="%s">`, inputDate.Format("2006-01-02"))
 	sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Graph</h2>`)
 	sb.WriteString(`<div class="mb-4 flex justify-center">`)
 	sb.WriteString(chart.Render(displayPrices, labels, func(index int, price float32) string {
-		if index == actualIndex {
-			return "fill-blue-600"
-		}
 		if index == cheapestIdx || price < 0.0 {
 			return "fill-green-600"
 		}
@@ -207,7 +204,8 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 
 	sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Table</h2>`)
 	sb.WriteString(`<div class="mb-4 flex justify-center">`)
-	sb.WriteString(prices.RenderTable(&state.Distribution, actualIndex, currency, includeDist))
+	sb.WriteString(prices.RenderTable(&state.Distribution, currency, includeDist))
+	sb.WriteString(`</div>`)
 	sb.WriteString(`</div>`)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
