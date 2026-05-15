@@ -209,10 +209,10 @@ func (d *DayPrices) RenderTable(dist *Distribution, currency Currency, includeDi
 	var sb strings.Builder
 	hours := (len(displayPrices) + 3) / 4
 	sb.WriteString("<table>")
-	sb.WriteString(`<tr><th class="px-4">Hour</th><th class="px-4">:00</th><th class="px-4">:15</th><th class="px-4">:30</th><th class="px-4">:45</th></tr>`)
+	sb.WriteString(`<tr><th class="text-right px-4">Hour</th><th class="px-4">:00</th><th class="px-4">:15</th><th class="px-4">:30</th><th class="px-4">:45</th></tr>`)
 	for hour := 0; hour < hours; hour++ {
 		sb.WriteString("<tr>")
-		fmt.Fprintf(&sb, `<td class="text-right font-mono px-4">%d:00</td>`, hour)
+		fmt.Fprintf(&sb, `<td class="text-right font-mono font-bold px-4">%d</td>`, hour)
 		for q := 0; q < 4; q++ {
 			idx := hour*4 + q
 			if idx >= len(displayPrices) {

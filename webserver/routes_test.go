@@ -249,15 +249,15 @@ func TestRoute_Root_DSTSpringDay_Renders92Quarters_And23HourRows(t *testing.T) {
 	if strings.Contains(body, `data-idx="92"`) {
 		t.Error(`unexpected data-idx="92" — DST spring day should stop at 91`)
 	}
-	// 23 hour-rows: hour labels 0:00..22:00, but NOT 23:00.
+	// 23 hour-rows: hour labels 0..22, but NOT 23.
 	for h := 0; h <= 22; h++ {
-		marker := fmt.Sprintf(">%d:00<", h)
+		marker := fmt.Sprintf(`px-4">%d</td>`, h)
 		if !strings.Contains(body, marker) {
-			t.Errorf("missing hour row %d:00", h)
+			t.Errorf("missing hour row %d", h)
 		}
 	}
-	if strings.Contains(body, ">23:00<") {
-		t.Error("DST spring day should not render hour 23:00 (only 23 hours)")
+	if strings.Contains(body, `px-4">23</td>`) {
+		t.Error("DST spring day should not render hour 23 (only 23 hours)")
 	}
 }
 
@@ -294,11 +294,11 @@ func TestRoute_Root_DSTAutumnDay_Renders100Quarters_And25HourRows(t *testing.T) 
 	if strings.Contains(body, `data-idx="100"`) {
 		t.Error(`unexpected data-idx="100" — DST autumn day should stop at 99`)
 	}
-	// 25 hour-rows: hour labels 0:00..24:00.
+	// 25 hour-rows: hour labels 0..24.
 	for h := 0; h <= 24; h++ {
-		marker := fmt.Sprintf(">%d:00<", h)
+		marker := fmt.Sprintf(`px-4">%d</td>`, h)
 		if !strings.Contains(body, marker) {
-			t.Errorf("missing hour row %d:00", h)
+			t.Errorf("missing hour row %d", h)
 		}
 	}
 }
@@ -329,13 +329,13 @@ func TestRoute_Root_NormalDay_Renders96Quarters_And24HourRows(t *testing.T) {
 		t.Error(`unexpected data-idx="96"`)
 	}
 	for h := 0; h <= 23; h++ {
-		marker := fmt.Sprintf(">%d:00<", h)
+		marker := fmt.Sprintf(`px-4">%d</td>`, h)
 		if !strings.Contains(body, marker) {
-			t.Errorf("missing hour row %d:00", h)
+			t.Errorf("missing hour row %d", h)
 		}
 	}
-	if strings.Contains(body, ">24:00<") {
-		t.Error("normal day should not render hour 24:00")
+	if strings.Contains(body, `px-4">24</td>`) {
+		t.Error("normal day should not render hour 24")
 	}
 }
 
