@@ -112,32 +112,6 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	chart := DefaultChartSettings()
 
 	prices, ok := state.GetPrices(inputDate)
-	if !ok {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusNotFound)
-		body := RenderLayout("<p>Error fetching data.</p>")
-		io.WriteString(w, body)
-		return
-	}
-
-	totalPrices := prices.TotalPrices(&state.Distribution)
-	var displayPrices []float32
-	if includeDist {
-		displayPrices = totalPrices
-	} else {
-		displayPrices = prices.Prices
-	}
-	cheapestIdx, minPrice := CheapestHour(displayPrices)
-	expensiveIdx, maxPrice := ExpensiveHour(displayPrices)
-
-	var sum float32
-	for _, p := range displayPrices {
-		sum += p
-	}
-	avgPrice := sum / float32(len(displayPrices))
-
-	distLabels := state.Distribution.ByHours()
-	labels := distLabels[:]
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, `<h1 class="text-4xl font-bold">OTE prices %s</h1>`,
@@ -182,34 +156,59 @@ func routeGetRoot(state *AppState, w http.ResponseWriter, r *http.Request) {
 	sb.WriteString(RenderCalendar(inputDate.Year(), inputDate.Month(), loc, inputDate, today, maxDate, monthAvgs, currency, includeDist))
 	sb.WriteString(`</div>`)
 
-	fmt.Fprintf(&sb, `<div class="mb-4">Min: <span class="font-bold text-green-700 dark:text-green-400">%.2f</span> | Avg: <span class="font-bold">%.2f</span> | Max: <span class="font-bold text-red-700 dark:text-red-400">%.2f</span> %s</div>`,
-		currency.Convert(minPrice),
-		currency.Convert(avgPrice),
-		currency.Convert(maxPrice),
-		html.EscapeString(currency.ShortLabel()))
-
-	fmt.Fprintf(&sb, `<div data-page-date="%s">`, inputDate.Format("2006-01-02"))
-	sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Graph</h2>`)
-	sb.WriteString(`<div class="mb-4 flex justify-center">`)
-	sb.WriteString(chart.Render(displayPrices, labels, func(index int, price float32) string {
-		if index == cheapestIdx || price < 0.0 {
-			return "fill-green-600"
+	status := http.StatusOK
+	if !ok {
+		status = http.StatusNotFound
+		sb.WriteString(`<p class="my-8 text-red-600 dark:text-red-400">Error fetching data for this date. Prices may not be published yet — try another date.</p>`)
+	} else {
+		totalPrices := prices.TotalPrices(&state.Distribution)
+		var displayPrices []float32
+		if includeDist {
+			displayPrices = totalPrices
+		} else {
+			displayPrices = prices.Prices
 		}
-		if index == expensiveIdx {
-			return "fill-red-600"
-		}
-		return "fill-gray-500"
-	}, currency))
-	sb.WriteString(`</div>`)
+		cheapestIdx, minPrice := CheapestHour(displayPrices)
+		expensiveIdx, maxPrice := ExpensiveHour(displayPrices)
 
-	sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Table</h2>`)
-	sb.WriteString(`<div class="mb-4 flex justify-center">`)
-	sb.WriteString(prices.RenderTable(&state.Distribution, currency, includeDist))
-	sb.WriteString(`</div>`)
-	sb.WriteString(`</div>`)
+		var sum float32
+		for _, p := range displayPrices {
+			sum += p
+		}
+		avgPrice := sum / float32(len(displayPrices))
+
+		distLabels := state.Distribution.ByHours()
+		labels := distLabels[:]
+
+		fmt.Fprintf(&sb, `<div class="mb-4">Min: <span class="font-bold text-green-700 dark:text-green-400">%.2f</span> | Avg: <span class="font-bold">%.2f</span> | Max: <span class="font-bold text-red-700 dark:text-red-400">%.2f</span> %s</div>`,
+			currency.Convert(minPrice),
+			currency.Convert(avgPrice),
+			currency.Convert(maxPrice),
+			html.EscapeString(currency.ShortLabel()))
+
+		fmt.Fprintf(&sb, `<div data-page-date="%s">`, inputDate.Format("2006-01-02"))
+		sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Graph</h2>`)
+		sb.WriteString(`<div class="mb-4 flex justify-center">`)
+		sb.WriteString(chart.Render(displayPrices, labels, func(index int, price float32) string {
+			if index == cheapestIdx || price < 0.0 {
+				return "fill-green-600"
+			}
+			if index == expensiveIdx {
+				return "fill-red-600"
+			}
+			return "fill-gray-500"
+		}, currency))
+		sb.WriteString(`</div>`)
+
+		sb.WriteString(`<h2 class="text-2xl font-semibold mb-4">Table</h2>`)
+		sb.WriteString(`<div class="mb-4 flex justify-center">`)
+		sb.WriteString(prices.RenderTable(&state.Distribution, currency, includeDist))
+		sb.WriteString(`</div>`)
+		sb.WriteString(`</div>`)
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 	io.WriteString(w, RenderLayout(sb.String()))
 }
 

@@ -359,6 +359,20 @@ func TestRoute_Root_FetchFailureReturns404(t *testing.T) {
 	if !strings.Contains(body, "Error fetching data") {
 		t.Errorf("body missing error message: %s", body)
 	}
+	// Page chrome must still render so the user can navigate to a working date.
+	if !strings.Contains(body, "OTE prices 2026-05-10") {
+		t.Errorf("error page missing date heading")
+	}
+	if !strings.Contains(body, `href="/optimizer"`) {
+		t.Errorf("error page missing Optimizer nav link")
+	}
+	if !strings.Contains(body, `href="/consumption"`) {
+		t.Errorf("error page missing Consumption nav link")
+	}
+	// Calendar lets the user pick another date.
+	if !strings.Contains(body, "May 2026") {
+		t.Errorf("error page missing calendar month header")
+	}
 }
 
 func TestRoute_Root_UnknownPathReturns404(t *testing.T) {
